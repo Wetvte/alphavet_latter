@@ -1,6 +1,8 @@
 module github.com/Wetvte/alphavet_letter
 
-go 1.23.2
+go 1.24.0
+
+toolchain go1.24.11
 
 require (
 	github.com/golang/snappy v0.0.4 // indirect
@@ -14,6 +16,7 @@ require (
 	github.com/youmark/pkcs8 v0.0.0-20240726163527-a2c0da244d78 // indirect
 	go.mongodb.org/mongo-driver v1.17.6 // indirect
 	golang.org/x/crypto v0.26.0 // indirect
+	golang.org/x/oauth2 v0.33.0 // indirect
 	golang.org/x/sync v0.8.0 // indirect
 	golang.org/x/text v0.17.0 // indirect
 )
