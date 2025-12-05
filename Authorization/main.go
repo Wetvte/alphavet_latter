@@ -31,7 +31,7 @@ var mongoClient *mongo.Client
 
 func LoadEnv() {
 	// Загружаем переменные из .env
-	err := godotenv.Load("authoDB.env")
+	err := godotenv.Load("authoData.env")
 	if err != nil {
 		log.Fatal("Ошибка загрузки .env:", err)
 	}
@@ -125,8 +125,8 @@ func AuthoCallbackHandler(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		log.Fatalf("Ошибка при создании пользователя: %v", err)
 		http.Redirect(w, r, "/login", http.StatusFound)
-
 	}
+
 	DisconnectFromMongoDatabase()
 }
 func CreateOAuthConfig() *oauth2.Config {
