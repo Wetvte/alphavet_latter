@@ -15,10 +15,13 @@ import (
 	"os"
 
 	"github.com/joho/godotenv"
+	"go.mongodb.org/mongo-driver/bson"
 	"go.mongodb.org/mongo-driver/mongo"
 	"go.mongodb.org/mongo-driver/mongo/options"
 
 	// Для работы с OAuth
+	"encoding/json"
+
 	"golang.org/x/oauth2"
 )
 
@@ -35,6 +38,7 @@ func LoadEnv() {
 
 }
 
+// Для работы с сервером
 func LaunchServer() {
 	router := mux.NewRouter()
 	router.HandleFunc("/", HomeHandler)
@@ -46,6 +50,7 @@ func LaunchServer() {
 		Handler: router,
 	}
 	server.ListenAndServe()
+	defer CloseServer()
 }
 func CloseServer() {
 	// Корректно останавливаем сервер
@@ -66,31 +71,65 @@ func LoginHandler(w http.ResponseWriter, r *http.Request) {
 	http.Redirect(w, r, url, http.StatusFound)
 }
 func AuthoCallbackHandler(w http.ResponseWriter, r *http.Request) {
+	// Получаем code из URL
 	code := r.FormValue("code")
+	if code == "" {
+		http.Error(w, "Отсутствует code", http.StatusBadRequest)
+		return
+	}
 
-	// Получаем токен
+	// Обмениваем code на токен
 	token, err := githubOAuthConfig.Exchange(context.Background(), code)
 	if err != nil {
 		http.Error(w, "Не удалось получить токен", http.StatusInternalServerError)
 		return
 	}
 
-	// Используем токен для запросов к API GitHub
+	// Создаём авторизованный HTTP‑клиент
 	client := githubOAuthConfig.Client(context.Background(), token)
+
+	// Делаем запрос к GitHub API за данными пользователя
 	resp, err := client.Get("https://api.github.com/user")
 	if err != nil {
 		http.Error(w, "Ошибка запроса к GitHub API", http.StatusInternalServerError)
 		return
 	}
-	defer resp.Body.Close()
+	defer resp.Body.Close() // Обязательно закрываем тело ответа
 
-	// Здесь можно сохранить данные пользователя в MongoDB
-	w.Write([]byte("Успешная авторизация!"))
+	// Проверяем статус HTTP
+	if resp.StatusCode != http.StatusOK {
+		http.Error(w, fmt.Sprintf("Ошибка GitHub API: %d", resp.StatusCode), http.StatusBadGateway)
+		return
+	}
+
+	// Читаем и декодируем JSON
+	var userData map[string]interface{}
+	err = json.NewDecoder(resp.Body).Decode(&userData)
+	if err != nil {
+		http.Error(w, "Ошибка декодирования JSON", http.StatusInternalServerError)
+		return
+	}
+
+	ConnectToMongoDatabase()
+	// Отбирает информацию
+	requiredUserInfo := bson.M{
+		"ghLogin": userData["login"], // GH Логин - string
+		"ghId":    userData["id"],    // GH Айди - float64 (strconv.ParseFloat(userData["id"], 64))
+		"ghName":  userData["name"],  // GH Имя - name
+		"email":   userData["email"]}
+
+	// Добавляет пользователя
+	err = InsertUserToDatabase(mongoClient, requiredUserInfo)
+
+	// Если ошибка, авторизируем заново
+	if err != nil {
+		log.Fatalf("Ошибка при создании пользователя: %v", err)
+		http.Redirect(w, r, "/login", http.StatusFound)
+
+	}
+	DisconnectFromMongoDatabase()
 }
 func CreateOAuthConfig() *oauth2.Config {
-	log.Printf("ClientID из .env: %s", os.Getenv("GITHUB_CLIENT_ID"))
-	log.Printf("ClientSecret из .env: %s", os.Getenv("GITHUB_CLIENT_SECRET"))
-	log.Printf("Callback URL из .env: %s", os.Getenv("CALLBACK_URL"))
 	return &oauth2.Config{
 		ClientID:     os.Getenv("GITHUB_CLIENT_ID"),
 		ClientSecret: os.Getenv("GITHUB_CLIENT_SECRET"),
@@ -103,7 +142,14 @@ func CreateOAuthConfig() *oauth2.Config {
 	}
 }
 
-func ConnectToDatabase() {
+// Для работы с БД
+func ConnectToMongoDatabase() {
+	// Проверяет, есть ли подключение уже. Если есть, останавливает попытку
+	err := mongoClient.Ping(context.Background(), nil)
+	if err == nil {
+		return
+	}
+
 	// Получаем строку подключения
 	mongoURI := os.Getenv("MONGODB_URI")
 	if mongoURI == "" {
@@ -123,22 +169,25 @@ func ConnectToDatabase() {
 		log.Fatal("Ошибка проверки подключения:", err)
 	}
 
-	log.Println("Успешно подключились к mongoDB")
+	log.Println("Успешное подключение к mongoDB")
 }
-
-// Закрыть соединение при завершении
-func DisconnectFromDatabase() {
+func InsertUserToDatabase(client *mongo.Client, data bson.M) error {
+	collection := client.Database("LettersProject").Collection("Users")
+	_, err := collection.InsertOne(context.Background(), data)
+	return err
+}
+func DisconnectFromMongoDatabase() {
 	err := mongoClient.Disconnect(context.Background())
 	if err != nil {
 		log.Fatal(err)
 	}
 }
 
+// Мэин
 func main() {
 	LoadEnv()
 
 	githubOAuthConfig = CreateOAuthConfig()
 
 	LaunchServer()
-	defer CloseServer()
 }
