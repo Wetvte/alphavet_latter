@@ -1,0 +1,217 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8">
+  <title>Личный кабинет</title>
+  <style>
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+
+    body {
+      font-family: Arial, sans-serif;
+      background: linear-gradient(0deg, #f0f8ff 0%, #bce0ff 100%);
+      background-size: 200% 200%;
+      min-height: 100vh;
+      display: flex;
+      justify-content: center;
+      align-items: flex-start;
+      padding: 20px 0;
+    }
+
+    .container {
+      width: 100%;
+      max-width: 800px;
+      margin: 0 auto;
+      padding: 0 20px;
+    }
+
+    .content-panel {
+      background-color: white;
+      border-radius: 12px;
+      box-shadow: 0 10px 30px rgba(0, 0, 0, 0.1);
+      overflow: hidden;
+      position: relative;
+    }
+
+    .header {
+      padding: 30px 40px 20px;
+    }
+
+    .title {
+      text-align: center;
+      color: #272626;
+      font-size: 28px;
+      margin-bottom: 20px;
+      font-weight: bold;
+    }
+
+    .divider {
+      height: 1px;
+      background-color: #e0e0e0;
+      margin: 0 auto 25px;
+      max-width: 90%;
+    }
+
+    .user-info {
+      padding: 0 40px 25px;
+    }
+
+    .info-row {
+      display: flex;
+      justify-content: space-between;
+      margin-bottom: 15px;
+      font-size: 16px;
+      color: #4d4a4a;
+    }
+
+    .label {
+      font-weight: bold;
+      min-width: 100px;
+    }
+
+    .value {
+      color: #333;
+      flex-grow: 1;
+    }
+
+    .logout-buttons {
+      padding: 0 40px 30px;
+      display: flex;
+      gap: 20px;
+      justify-content: center;
+    }
+
+    .btn {
+      padding: 12px 24px;
+      border: none;
+      border-radius: 6px;
+      cursor: pointer;
+      font-size: 16px;
+      font-weight: 500;
+      transition: all 0.3s ease;
+    }
+
+    .btn-logout {
+      background-color: #0b55b7;
+      color: white;
+    }
+
+    .btn-logout-all {
+      background-color: #d80303;
+      color: white;
+    }
+
+    .btn:hover {
+      transform: translateY(-2px);
+      box-shadow: 0 5px 15px rgba(0, 0, 0, 0.2);
+    }
+
+    .section {
+      padding: 25px 40px;
+      border-top: 1px solid #e0e0e0;
+    }
+
+    .section-title {
+      font-size: 20px;
+      color: #0b55b7;
+      margin-bottom: 15px;
+      font-weight: 600;
+    }
+
+    .section-content {
+      color: #555;
+      line-height: 1.6;
+    }
+
+    .footer {
+      padding: 25px 40px;
+      text-align: center;
+      color: #666;
+      font-size: 14px;
+      border-top: 1px solid #e0e0e0;
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <div class="content-panel">
+      <!-- Заголовок -->
+      <div class="header">
+        <h1 class="title">Личный кабинет</h1>
+        <div class="divider"></div>
+      </div>
+
+      <!-- Данные пользователя -->
+      <div class="user-info">
+        <div class="info-row">
+          <span class="label">Никнейм:</span>
+          <span class="value">Иван_Петров</span>
+        </div>
+        <div class="info-row">
+          <span class="label">Почта:</span>
+          <span class="value">ivan.petrov@example.com</span>
+        </div>
+        <div class="divider"></div>
+      </div>
+
+      <!-- Кнопки выхода -->
+      <div class="logout-buttons">
+        <button class="btn btn-logout" onclick="location.href='/logout.html'">
+          Выход
+        </button>
+        <button class="btn btn-logout-all" onclick="location.href='/logout.html?all=true'">
+          Выход со всех устройств
+        </button>
+      </div>
+      <div class="divider"></div>
+
+      <!-- Раздел "На главную" -->
+      <div class="section">
+        <h2 class="section-title">На главную</h2>
+        <div class="section-content">
+          Здесь вы можете вернуться на главную страницу сайта, чтобы ознакомиться с основными разделами и новостями.
+          Кнопка перехода расположена в верхнем меню сайта.
+        </div>
+      </div>
+
+      <!-- Раздел "Тесты" -->
+      <div class="section">
+        <h2 class="section-title">Тесты</h2>
+        <div class="section-content">
+          В этом разделе представлены все доступные тесты по дисциплинам. Вы можете:
+          <ul>
+            <li>просмотреть список тестов;</li>
+            <li>ознакомиться с результатами пройденных тестов;</li>
+            <li>начать новый тест;</li>
+            <li>посмотреть статистику выполнения.</li>
+          </ul>
+        </div>
+      </div>
+
+      <!-- Раздел "Дисциплины" -->
+      <div class="section">
+        <h2 class="section-title">Дисциплины</h2>
+        <div class="section-content">
+          Список ваших дисциплин с возможностью:
+          <ul>
+            <li>просмотра учебного плана;</li>
+            <li>доступа к материалам курса;</li>
+            <li>проверки текущих заданий;</li>
+            <li>связи с преподавателем.</li>
+          </ul>
+        </div>
+      </div>
+
+      <div class="divider"></div>
+
+      <!-- Подвал -->
+      <div class="footer">
+        Иванов Иван Иванович
+      </div>
+    </div>
+  </div>
+</body>
+</html>

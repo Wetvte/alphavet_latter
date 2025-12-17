@@ -1,0 +1,830 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8">
+  <title>Вход в систему</title>
+  <style>
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+    /* Тело сайта */
+    body {
+      font-family: Arial, sans-serif;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      height: 100vh;
+      margin: 0;
+      padding: 50px;
+      background: linear-gradient(0deg, #f0f8ff 0%, #bce0ff 100%);
+      background-size: 200% 200%;
+    }
+
+    /* Загрузка */
+
+    /* Общее тело */
+    .loader-container {
+      text-align: center;
+      padding: 20px;
+      background-color: white;
+      border-radius: 12px;
+      box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+      max-width: 300px;
+    }
+    .loader {
+      display: inline-block;
+      width: 50px;
+      height: 50px;
+      border: 4px solid #e4e6ea;
+      border-top-color: #1877f2;
+      border-radius: 50%;
+      animation: spin 1s linear infinite;
+      margin-bottom: 20px;
+    }
+    @keyframes spin {
+      0% { transform: rotate(0deg); }
+      100% { transform: rotate(360deg); }
+    }
+    .loader-text {
+      font-size: 16px;
+      color: #65676b;
+      margin-top: 10px;
+    }
+
+    /* Вход */
+
+    /* Общее тело */
+    .login-container {
+      background-color: white;
+      padding-top: 30px;
+      padding-bottom: 10px;
+      padding-left: 35px;
+      padding-right: 35px;
+      border-radius: 10px;
+      box-shadow: 0 10px 30px rgba(0, 0, 0, 0.15);
+      min-width: 300px;
+      max-width: 500px;
+      min-height: 450px;
+      max-height: 90vh;
+      backdrop-filter: blur(15px);
+      position: relative;
+      overflow-y: auto;
+      overflow-x: hidden;
+    }
+
+    @keyframes underlinePulse {
+      0%, 100% { opacity: 0.4; }
+      50% { opacity: 1; }
+    }
+
+    /* Табы: Вход и Регистрация */
+    .tabs {
+      display: flex;
+      justify-content: center; /* Центрируем вкладки */
+      gap: 30px;
+      border-bottom: 1px solid #e0e0e0;
+      margin-bottom: 10px;
+      padding-bottom: 10px;
+    }
+    /* Отдельно */
+    .tab {
+      position: relative;
+      font-size: 24px;
+      font-weight: 750;
+      margin: 0 10px ;
+      color: #272626;
+      cursor: pointer;
+      transition: color 0.3s ease;
+      padding-bottom: 5px;
+      text-align: center; /* Выравниваем текст по центру внутри вкладки */
+      min-width: 80px; /* Даём минимальную ширину для лучшей читаемости */
+      transition: all 0.25s ease;
+    }
+    /* Наведение */
+    .tab:hover {
+      transform: translateY(-5px);
+      color: #40464e;
+    }
+    /* Активный таб */
+    .tab.active::after {
+      content: "";
+      display: block;
+      width: 100%;
+      height: 3px;
+      background: #1a73e8;
+      border-radius: 3px;
+      position: absolute;
+      bottom: 0;
+      left: 0;
+      opacity: 0;
+      animation: underlinePulse 3s infinite;
+    }
+    /* Формы */
+    #inputsFormsContainer {
+      margin-bottom: 20px;
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+    }
+    .form-group {
+      margin-bottom: 0;
+      min-height: 60px;
+    }
+    /* Заголовки форм */
+    label {
+      display: block;
+      margin-bottom: 7px;
+      font-weight: bold;
+      color: #4d4a4a;
+      font-size: 16px;
+    }
+    /* Поля форм */
+    input[type="text"],
+    input[type="password"] {
+      width: 100%;
+      padding: 12px;
+      border: 2px solid #e0e0e0;
+      border-radius: 5px;
+      box-sizing: border-box;
+      font-size: 16px;
+      transition: border-color 0.5s ease;
+    }
+    input:focus {
+      outline: none;
+      border-color: #5a84ba;
+    }
+
+    /* Уведомления */
+    .notification {
+    position: relative;
+    padding: 15px 20px;
+    border-radius: 8px;
+    margin-bottom: 20px;
+    font-size: 16px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+    animation: fadeIn 0.3s ease;
+  }
+  /* Содержание уведомления */
+  #notification-content {
+    flex-grow: 1;
+    padding-right: 10px;
+  }
+  /* Типы уведомлений */
+  .notification.success {
+    background-color: #d4edda;
+    color: #155724;
+    border: 1px solid #c3e6cb;
+  }
+  .notification.error {
+    background-color: #f8d7da;
+    color: #721c24;
+    border: 1px solid #f5c6cb;
+  }
+  /* Кнопка закрытия */
+  .close-button {
+  background: none;
+  border: none;
+  font-size: 25px;
+  color: currentColor;
+  cursor: pointer;
+  padding: 8px;
+  line-height: 1;
+  max-width: 25px; /* Минимальная ширина кнопки */
+  display: flex;
+  align-items: center;
+  justify-content: right;
+  position: relative;
+  }
+  .close-button:hover {
+    opacity: 0.7;
+  }
+
+  /* Анимация появления */
+  @keyframes fadeIn {
+    from { opacity: 0; transform: translateY(-10px); }
+    to { opacity: 1; transform: translateY(0); }
+  }
+
+  /* Контейнер окна подтверждения */
+  .confirm-container {
+    position: fixed;
+    display: flex;
+    justify-content: space-between;
+    flex-direction: column;
+    min-width: 400px;
+    max-width: 600px;
+    min-height: 250px;
+    max-height: 500px;
+    background-color: white;
+    text-align: center;
+    box-shadow: 0 10px 30px rgba(0, 0, 0, 0.2);
+    border-radius: 12px;
+    padding: 25px;
+    z-index: 1000; /* Выше других элементов */
+  }
+  .confirm-text {
+    font-size: 18px;
+    color: #333;
+    margin-bottom: 20px;
+    line-height: 1.5;
+  }
+  .confirm-buttons {
+    display: flex;
+    gap: 15px;
+    align-items: flex-end;
+    justify-content: center;
+    width: 100%;
+    margin-top: auto;
+  }
+  .confirm-button.yes {
+    background-color: #28a745;
+    color: white;
+  }
+  .confirm-button.yes:hover {
+    background-color: #125220;
+    transform: translateY(-2px);
+  }
+  .confirm-button.no {
+    background-color: #dc3545;
+    color: white;
+  }
+
+  .confirm-button.no:hover {
+    background-color: #7d141e;
+    transform: translateY(-2px);
+  }
+
+  /* Любая кнопка */
+  button {
+    width: 100%;
+    height: 40px;
+    padding: 10px;
+    border: none;
+    border-radius: 6px;
+    cursor: pointer;
+    font-size: 16px;
+    font-weight: 600;
+    transition: all 0.25s ease;
+    position: relative;
+    overflow: hidden;
+  }
+  #entryButton {
+    height: 45px;
+    padding: 8px;
+    margin-bottom: 15px;
+    font-size: 18px;
+    background-color: #0b55b7;
+    color: white;
+  }
+  #entryButton:hover {
+    background-color: #002453;
+    color: white;
+  }
+  button:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 5px 12px rgba(26, 115, 232, 0.25);
+  }
+  /* Сервисы */
+  #authServicesContainer {
+    border-top: 1px solid #e0e0e0;
+    padding: 10px
+  }
+  .autho-service {
+    margin-top: 10px;
+    text-align: center;
+  }
+  .github-button {
+    background-color: #121212;
+    color: rgb(199, 199, 199);
+  }
+  .github-button:hover {
+    background-color: #323232;
+  }
+  .yandex-button {
+    background-color: #d80303;
+    color: rgb(225, 225, 225);
+  }
+  .yandex-button:hover {
+    background-color: #7c0000;
+  }
+
+  /* Для скрывания элементов */
+  .hidden {
+    display: none !important;
+  }
+
+  /* Подтверждение регистрации */
+  .verification-group {
+    min-height: 80px;
+  }
+  .code-input-container {
+    display: flex;
+    justify-content: space-between;
+    gap: 5px;
+  }
+  .code-input {
+    width: 40px;
+    height: 40px;
+    text-align: center;
+    font-size: 18px;
+    border: 2px solid #e0e0e0;
+    border-radius: 5px;
+    transition: border-color 0.3s ease, transform 0.3s ease;
+  }
+  .code-input:focus {
+    outline: none;
+    border-color: #0f52a9;
+    transform: scale(1.05);
+  }
+  </style>
+</head>
+<body>
+  <!-- Экран загрузки -->
+  <div id="loaderContainer" class="loader-container">
+    <div class="loader"></div>
+    <div class="loader-text">Обработка...</div>
+  </div>  
+  
+  <!-- Окно подтверждения -->
+  <div id="confirmContainer" class="confirm-container hidden">
+    <p id="confirmText" class="confirm-text">Вы уверены, что хотите продолжить?</p>
+    <div class="confirm-buttons">
+      <button id="confirmYes" class="confirm-button yes">Да</button>
+      <button id="confirmNo" class="confirm-button no">Нет</button>
+    </div>
+  </div>
+
+  <!-- Весь контейнер входа -->
+  <div id="loginContainer"  class="login-container hidden">
+    <!-- Табы Вход / Регистрация (теперь по центру) -->
+    <div class="tabs">
+      <div class="tab active" id="tabAuth">Вход</div>
+      <div class="tab" id="tabRegistration">Регистрация</div>
+    </div>
+
+    <!-- Форма входа -->
+    <form id="inputsFormsContainer">
+      <div id="emailForm" class="form-group">
+        <label for="email">Почта</label>
+        <input type="text" id="emailInput" name="email" required>
+      </div>
+      <div id="nameForm" class="form-group">
+        <label for="name">Никнейм</label>
+        <input type="text" id="nameInput" name="name" required>
+      </div>
+      <div id="passwordForm" class="form-group">
+        <label for="password">Пароль</label>
+        <input type="password" id="passwordInput" name="password" required>
+      </div>
+      <div id="repeatPasswordForm" class="form-group">
+        <label for="repeatPassword">Повтор пароля</label>
+        <input type="password" id="repeatPasswordInput" name="repeatPassword" required>
+      </div>
+
+      <!-- Блок для ввода шестизначного кода подтверждения -->
+      <div class="verification-group" id="codeVerification">
+        <label for="code">Код подтверждения</label>
+        <div class="code-input-container">
+          <input type="text" class="code-input" maxlength="1" required>
+          <input type="text" class="code-input" maxlength="1" required>
+          <input type="text" class="code-input" maxlength="1" required>
+          <input type="text" class="code-input" maxlength="1" required>
+        </div>
+      </div>
+
+      <!-- Блок уведомления о результате -->
+      <div id="notification" class="notification error">
+        <div id="notificationContent">Неверный логин или пароль</div>
+        <button id="closeNotification" class="close-button">x</button>
+      </div>
+    </form>
+
+    <button type="submit" id="entryButton">Зарегистрироваться</button>
+
+    <div id="authServicesContainer">
+      <div class="autho-service">
+        <button id="githubAuth" class="github-button">Войти через GitHub</button>
+      </div>
+      <div class="autho-service">
+        <button id="yandexAuth" class="yandex-button">Войти через Яндекс</button>
+      </div>
+    </div>
+
+    <script>
+      // Контейнера
+      let loaderContainer;
+      let loginContainer;
+      let confirmContainer;
+
+      // Переменные кнопок меню
+      let authTab;
+      let registrationTab;
+      let lastTab = "";
+
+      // Переменные ввода информации
+      let inputs;
+      let emailForm, emailInput;
+      let nameForm, nameInput;
+      let passwordForm, passwordInput;
+      let repeatPasswordForm, repeatPasswordInput;
+
+      // Блок подтверждения
+      let verificationBlock;
+      let verificationInputs;
+
+      // Кнопки и текст подтверждения
+      let confirmYesButton;
+      let confirmNoButton;
+      let confirmText;
+
+      // Вывод информации
+      let notification;
+
+      // Кнопка ввода
+      let entryButton;
+
+      const web_server_url = "http://localhost:3000";
+      
+      // Отправка пост запросов к Web Client"у (возвращает response)
+      async function send_data_to_webclient(page, data, token=undefined) {
+        const target_url = `${web_server_url}/${page}`;
+        console.log("Отправка данных по URL: " + target_url)
+        try {
+            const response = await fetch(target_url, {
+                method: "POST",
+                headers: token ? {
+                  "Authorization": "Bearer " + token,
+                  "Content-Type": "application/json"
+                } : {
+                  "Content-Type": "application/json"
+                },
+                body: JSON.stringify(data),
+                credentials: "include" // для передачи куки
+            });
+            if (!response.ok) {
+              send_notification("error", "Ошибка при приёме данных.")
+              return;
+            }
+            return await response.json(); // Возвращаем json с данными, как ответ
+        } catch (error) {
+            send_notification("error", "Ошибка при отправке данных.");
+        }
+      }
+
+      // Очистка всех полей ввода
+      function clear_all_inputs() {
+        inputs.forEach(input => {
+          input.value = "";
+        });
+      }
+
+      // Работа с выбором меню и экрана загрузки
+      // Загрузка
+      function open_loading() {
+        entryButton.onclick = undefined;
+        loginContainer.classList.add("hidden");
+        loaderContainer.classList.remove("hidden");
+      }
+      // Авторизация
+      function open_authorization_menu() {
+        if (lastTab != "authorization") {
+          clear_all_inputs();
+          lastTab = "authorization";
+        }
+
+        authTab.classList.add("active");
+        registrationTab.classList.remove("active");
+
+        emailForm.classList.remove("hidden");
+        nameForm.classList.add("hidden");
+        passwordForm.classList.remove("hidden");
+        repeatPasswordForm.classList.add("hidden");
+        verificationBlock.classList.add("hidden");
+        notification.classList.add("hidden");
+
+        entryButton.textContent = "Авторизироваться";
+        entryButton.onclick = auth_with_code;
+
+        loginContainer.classList.remove("hidden");
+        loaderContainer.classList.add("hidden");
+      }
+      // Регистрация
+      function open_registration_menu() {
+        if (lastTab != "registration") {
+          clear_all_inputs();
+          lastTab = "registration";
+        }
+
+        authTab.classList.remove("active");
+        registrationTab.classList.add("active");
+
+        emailForm.classList.remove("hidden");
+        nameForm.classList.remove("hidden");
+        passwordForm.classList.remove("hidden");
+        repeatPasswordForm.classList.remove("hidden");
+        verificationBlock.classList.add("hidden");
+        notification.classList.add("hidden");
+
+        entryButton.textContent = "Зарегистрироваться";
+        entryButton.onclick = register_with_code;
+        
+        loginContainer.classList.remove("hidden");
+        loaderContainer.classList.add("hidden");
+      }
+      // Подтверждение
+      function open_registration_verifing() {
+        if (lastTab != "registration") {
+          clear_all_inputs();
+          verificationInputs.forEach((input, index) => {input.value = "";});
+          lastTab = "registration";
+        }
+        
+        authTab.classList.remove("active");
+        registrationTab.classList.add("active");
+
+        emailForm.classList.add("hidden");
+        nameForm.classList.add("hidden");
+        passwordForm.classList.add("hidden");
+        repeatPasswordForm.classList.add("hidden");
+        verificationBlock.classList.remove("hidden");
+        notification.classList.add("hidden");
+
+        entryButton.textContent = "Отправить код";
+        entryButton.onclick = verify_registration;
+
+        loginContainer.classList.remove("hidden");
+        loaderContainer.classList.add("hidden");
+      }
+
+      // Обработка кнопок сервисов
+      async function auth_with_github() {
+        open_loading();
+        const response = await send_data_to_webclient("login?type=github", {});
+        if (response && response["oauth_connect_success_state"] && response["oauth_connect_success_state"] === "success") {
+          console.log("Переходим на " + response["oauth_redirect_url"]);
+          window.location.href = response["oauth_redirect_url"];
+        } else {
+          open_authorization_menu();
+          send_notification("error", "Не удалось подключиться к сервису.");
+        }
+      }
+      async function auth_with_yandex() {
+        open_loading();
+        const response = await send_data_to_webclient("login?type=yandex", {});
+        if (response && response["oauth_connect_success_state"] && response["oauth_connect_success_state"] === "success") {
+          console.log("Переходим на " + response["oauth_redirect_url"]);
+          window.location.href = response["oauth_redirect_url"];
+        } else {
+          open_authorization_menu();
+          send_notification("error", "Не удалось подключиться к сервису.");
+        }
+      }
+
+      // Обработка авторизации через код (обычной)
+      async function auth_with_code() {
+        if (emailInput.value == "" || passwordInput.value == "")
+        {
+          send_notification("error", "Поля не должны быть пустыми.");
+          return;
+        }
+        open_loading();
+        const auth_response = await send_data_to_webclient("login?type=default", {
+          email: emailInput.value,
+          password: passwordInput.value
+        });
+        open_authorization_menu();
+        // Обрабатываем ошибки авторизации
+        if (!auth_response) {
+          open_authorization_menu();
+          send_notification("error", "Ошибка авторизации.");
+          return;
+        }
+        if (auth_response["success_state"] !== "success") {
+          send_notification("error", auth_response["message"]);
+          return;
+        }
+        // Пишет об успехе
+        send_notification("success", auth_response["message"]);
+        // Входит
+        window.location.href = web_server_url + "/login";
+      }
+      // Обработка регистрации через код
+      async function register_with_code() {
+        if (emailInput.value == "" || passwordInput.value == "" || repeatPasswordInput.value == "" || nameInput.value == "")
+        {
+          send_notification("error", "Поля не должны быть пустыми.");
+          return;
+        }
+        open_loading();
+        // Отправляем запрос на регистрацию
+        const registration_response = await send_data_to_webclient("registration",
+          {
+            email: emailInput.value,
+            name: nameInput.value,
+            password: passwordInput.value,
+            repeat_password: repeatPasswordInput.value
+          });
+          // Обрабатываем ошибки регистрации
+          if (!registration_response) {
+            open_registration_menu();
+            send_notification("error", "Ошибка регистрации.");
+            return;
+          }
+          if (registration_response["access_state"] !== "allowed") {
+            open_registration_menu();
+            send_notification("error", registration_response["message"]);
+            return;
+          }
+          const registrationToken = registration_response["registrationToken"];
+          save_сookie("registrationToken", registrationToken);
+          open_registration_verifing();
+      }
+      async function verify_registration() {
+        const verifyCode = "";
+        const inputs = document.querySelectorAll(".code-input");
+        inputs.forEach((input, index) => {
+          input.addEventListener("input", function() {
+            verifyCode += this.value;
+          });
+        });
+        // Обработка ситуации, когда открыто подтверждение, но регистрации не было
+        const registrationToken = get_cookie("registrationToken");
+        if (!registrationToken || registrationToken === "")
+        {
+          send_notification("error", "Отсутствует процесс регистрации, требующий подтверждения.");
+          open_registration_menu();
+          return;
+        }
+        // Обработка невведённого кода
+        if (verifyCode.length < inputs.length) {
+          send_notification("error", "Введите код полностью перед отправкой.")
+          return;
+        }
+
+        open_loading();
+        const verify_response = await send_data_to_webclient("/registration", {
+          verifyCode: verifyCode
+        }, registrationToken);
+
+        // Обрабатываем ошибки регистрации
+          if (!verify_response) {
+            open_registration_verifing();
+            send_notification("error", "Ошибка подтверждения.");
+            return;
+          }
+        if (verify_response["success_state"] !== "success") {
+          open_registration_verifing();
+          send_notification("error", verify_response["message"])
+          return;
+        }
+        // Если регистрация успешна, удаляет токен регистрации и переходим в меню входа
+        delete_cookie("registrationToken");
+        open_authorization_menu();
+      }
+      
+      // Отправка уведомления о процессах
+      function send_notification(type, text) {
+        notification.textContent = text;
+
+        notification.classList.remove(type == "error" ? "success" : "error");
+        notification.classList.add(type == "error" ? "success" : "error");
+
+        notification.classList.add("hidden");
+        notification.classList.remove("hidden");
+      }
+      function close_notification() {
+        notification.classList.add("hidden");
+      }
+
+      function send_confirm(text, yes_callback, no_callback) {
+        confirmText.textContent = text;
+        confirmContainer.classList.remove("hidden");
+        loaderContainer.classList.add("hidden");
+        loginContainer.classList.add("hidden");
+
+        confirmYesButton.onclick = yes_callback;
+        confirmNoButton.onclick = no_callback;
+      }
+      function close_confirm() {
+        confirmContainer.classList.add("hidden");
+      }
+
+      // Работа с куки локально
+      function save_сookie(name, value, days, path = "/") {
+        const date = new Date();
+        date.setTime(date.getTime() + (days * 24 * 60 * 60 * 1000));
+        document.cookie = `${name}"="${value}; expires=${date.toUTCString()}; path=${path}`;
+      }
+      function get_cookie(name) {
+        // Получаем все куки как строку
+        const cookies = document.cookie;
+        // Разбиваем на массив отдельных куки
+        const cookieArray = cookies.split("; ");
+        // Находим нужное куки по имени
+        const foundCookie = cookieArray.find(cookie => cookie.startsWith(`${name}=`));
+        // Если нашли — извлекаем значение (разделяем по "=" и берём вторую часть)
+        if (foundCookie) {
+            return foundCookie.split("=")[1];
+        }
+        // Если не нашли
+        return undefined;
+      }
+      function delete_cookie(name, path = "/") {
+          document.cookie = `${name}=; expires=Thu, 01 Jan 1970 00:00:00 GMT; path=${path}`;
+      }
+      
+      // Инициализация переменных и их настройка при загрузке документа
+      document.addEventListener("DOMContentLoaded", function() {
+        loaderContainer = document.getElementById("loaderContainer");
+        loginContainer = document.getElementById("loginContainer");
+        confirmContainer = document.getElementById("confirmContainer")
+
+        authTab = document.getElementById("tabAuth");
+        registrationTab = document.getElementById("tabRegistration");
+
+        // Все поля ввода на странице
+        inputs = document.querySelectorAll("input");
+        // Формы основных полей (с заголовками) на странице
+        emailForm = document.getElementById("emailForm");
+        nameForm = document.getElementById("nameForm");
+        passwordForm = document.getElementById("passwordForm");
+        repeatPasswordForm = document.getElementById("repeatPasswordForm");
+        // Основные поля 
+        emailInput = document.getElementById("emailInput");
+        nameInput = document.getElementById("nameInput");
+        passwordInput = document.getElementById("passwordInput");
+        repeatPasswordInput = document.getElementById("repeatPasswordInput");
+
+        verificationBlock = document.getElementById("codeVerification");
+        verificationInputs = document.querySelectorAll(".code-input");        
+        // Ставит коллбэк при вводе кода
+        verificationInputs.forEach((input, index) => {
+          input.addEventListener("input", function() {
+            // Если введено значение (не пустой)
+            if (this.value) {
+              // Переходим к следующему полю
+              const nextIndex = (index + 1) % verificationInputs.length;
+              verificationInputs[nextIndex].focus();
+            }
+          });
+        });
+
+        // Кнопки и текст подтверждений
+        confirmYesButton = document.getElementById("confirmYes");
+        confirmNoButton = document.getElementById("confirmNo");
+        confirmText= document.getElementById("confirmText");
+
+        // Вывод информации
+        notification = document.getElementById("notification");
+
+        // Кнопка ввода
+        entryButton = document.getElementById("entryButton");
+
+        // Заголовки
+        document.getElementById("tabAuth").onclick = open_authorization_menu;
+        document.getElementById("tabRegistration").onclick = open_registration_menu;
+
+        // Кнопки сервисов
+        document.getElementById("githubAuth").onclick = auth_with_github;
+        document.getElementById("yandexAuth").onclick = auth_with_yandex;
+
+        // Ставит ивент на кнопку закрытия уведомления
+        document.getElementById("closeNotification").onclick = close_notification;
+
+        // Настройка страницы в завиимости от Имени.
+        const user_name = " <!--Name--> ";
+        // Если имя не установлено, открываем формы входа
+        if (user_name == " <!--Name--> ") {
+          // Открывает меню входа, если нет кук на регистрацию. Иначе открывает меню входа
+          const registrationToken = get_cookie("registrationToken");
+          if (!registrationToken || registrationToken == "") {
+            open_authorization_menu();
+          }
+          else open_registration_verifing();
+        }
+        // Иначе открываем вопрос для авто-авторизации пользователя
+        else {
+          send_confirm("Войти, как " + user_name + " ?",
+          async function () { // yes
+            close_confirm();
+            open_loading();
+            // Переход подтвердит вход, и загрузит личный кабинет
+            window.location.href = web_server_url + "/login?target=confirm";
+          },
+          async function () { // no
+            close_confirm();
+            open_loading();
+            // Переход обнулит сессию, сделает ещё один переход сюда, но без name
+            window.location.href = web_server_url + "/login?target=cancel";
+          });
+        }
+      });
+    </script>
+  </div>
+</body>
+</html>
