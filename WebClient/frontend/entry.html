@@ -398,7 +398,7 @@
       </div>
 
       <!-- Блок уведомления о результате -->
-      <div id="notification" class="notification error">
+      <div id="notification" class="notification error hidden">
         <div id="notificationContent">Неверный логин или пароль</div>
         <button id="closeNotification" class="close-button">x</button>
       </div>
@@ -444,6 +444,7 @@
 
       // Вывод информации
       let notification;
+      let notificationContent;
 
       // Кнопка ввода
       let entryButton;
@@ -451,29 +452,29 @@
       const web_server_url = "http://localhost:3000";
       
       // Отправка пост запросов к Web Client"у (возвращает response)
-      async function send_data_to_webclient(page, data, token=undefined) {
-        const target_url = `${web_server_url}/${page}`;
-        console.log("Отправка данных по URL: " + target_url)
-        try {
-            const response = await fetch(target_url, {
-                method: "POST",
-                headers: token ? {
+      async function send_data_to_webclient(page, data={}, token=undefined, error_callback=undefined) {
+          const target_url = `${web_server_url}/${page}`;
+          console.log("Отправка данных по URL: " + target_url)
+          try {
+              const response = await fetch(target_url, {
+                  method: "POST",
+                  headers: token ? {
                   "Authorization": "Bearer " + token,
                   "Content-Type": "application/json"
-                } : {
+                  } : {
                   "Content-Type": "application/json"
-                },
-                body: JSON.stringify(data),
-                credentials: "include" // для передачи куки
-            });
-            if (!response.ok) {
-              send_notification("error", "Ошибка при приёме данных.")
+                  },
+                  body: JSON.stringify(data),
+                  credentials: "include" // для передачи куки
+              });
+              if (!response.ok) {
+              if (error_callback) error_callback("Ошибка при приёме данных.");
               return;
-            }
-            return await response.json(); // Возвращаем json с данными, как ответ
-        } catch (error) {
-            send_notification("error", "Ошибка при отправке данных.");
-        }
+              }
+              return await response.json(); // Возвращаем json с данными, как ответ
+          } catch (error) {
+              if (error_callback) error_callback("Ошибка при приёме данных.");
+          }
       }
 
       // Очистка всех полей ввода
@@ -505,7 +506,7 @@
         passwordForm.classList.remove("hidden");
         repeatPasswordForm.classList.add("hidden");
         verificationBlock.classList.add("hidden");
-        notification.classList.add("hidden");
+        //notification.classList.add("hidden");
 
         entryButton.textContent = "Авторизироваться";
         entryButton.onclick = auth_with_code;
@@ -528,7 +529,7 @@
         passwordForm.classList.remove("hidden");
         repeatPasswordForm.classList.remove("hidden");
         verificationBlock.classList.add("hidden");
-        notification.classList.add("hidden");
+        //notification.classList.add("hidden");
 
         entryButton.textContent = "Зарегистрироваться";
         entryButton.onclick = register_with_code;
@@ -544,6 +545,10 @@
           lastTab = "registration";
         }
         
+        verificationInputs.forEach((input, index) => {
+          input.value = "";
+        });
+        
         authTab.classList.remove("active");
         registrationTab.classList.add("active");
 
@@ -552,7 +557,7 @@
         passwordForm.classList.add("hidden");
         repeatPasswordForm.classList.add("hidden");
         verificationBlock.classList.remove("hidden");
-        notification.classList.add("hidden");
+        //notification.classList.add("hidden");
 
         entryButton.textContent = "Отправить код";
         entryButton.onclick = verify_registration;
@@ -564,7 +569,9 @@
       // Обработка кнопок сервисов
       async function auth_with_github() {
         open_loading();
-        const response = await send_data_to_webclient("login?type=github", {});
+        const response = await send_data_to_webclient("login?type=github", {}, undefined, function (message) {
+          send_notification("error", message);
+        });
         if (response && response["oauth_connect_success_state"] && response["oauth_connect_success_state"] === "success") {
           console.log("Переходим на " + response["oauth_redirect_url"]);
           window.location.href = response["oauth_redirect_url"];
@@ -575,7 +582,9 @@
       }
       async function auth_with_yandex() {
         open_loading();
-        const response = await send_data_to_webclient("login?type=yandex", {});
+        const response = await send_data_to_webclient("login?type=yandex", {}, undefined, function (message) {
+          send_notification("error", message);
+        });
         if (response && response["oauth_connect_success_state"] && response["oauth_connect_success_state"] === "success") {
           console.log("Переходим на " + response["oauth_redirect_url"]);
           window.location.href = response["oauth_redirect_url"];
@@ -596,6 +605,8 @@
         const auth_response = await send_data_to_webclient("login?type=default", {
           email: emailInput.value,
           password: passwordInput.value
+        }, undefined, function (message) {
+          send_notification("error", message);
         });
         open_authorization_menu();
         // Обрабатываем ошибки авторизации
@@ -604,7 +615,7 @@
           send_notification("error", "Ошибка авторизации.");
           return;
         }
-        if (auth_response["success_state"] !== "success") {
+        if (auth_response["success_state"] != "success") {
           send_notification("error", auth_response["message"]);
           return;
         }
@@ -628,48 +639,52 @@
             name: nameInput.value,
             password: passwordInput.value,
             repeat_password: repeatPasswordInput.value
-          });
+          }, undefined, function (message) {
+          send_notification("error", message);
+        });
           // Обрабатываем ошибки регистрации
           if (!registration_response) {
             open_registration_menu();
             send_notification("error", "Ошибка регистрации.");
             return;
           }
-          if (registration_response["access_state"] !== "allowed") {
+          if (registration_response["access_state"] != "allowed") {
             open_registration_menu();
             send_notification("error", registration_response["message"]);
             return;
           }
           const registrationToken = registration_response["registrationToken"];
-          save_сookie("registrationToken", registrationToken);
+          send_notification("success", registration_response["message"]);
+          save_cookie("registrationToken", registrationToken, 1000 * 60 * 5);
           open_registration_verifing();
       }
       async function verify_registration() {
-        const verifyCode = "";
-        const inputs = document.querySelectorAll(".code-input");
-        inputs.forEach((input, index) => {
-          input.addEventListener("input", function() {
-            verifyCode += this.value;
-          });
+        let verifyCode = "";
+        verificationInputs.forEach((input, index) => {
+          verifyCode += input.value;
         });
         // Обработка ситуации, когда открыто подтверждение, но регистрации не было
         const registrationToken = get_cookie("registrationToken");
+        console.log("Токен для передачи:", registrationToken);
+        console.log("Код отправляемый:", verifyCode, ". Собран из полей:", verificationInputs.length, verificationInputs);
         if (!registrationToken || registrationToken === "")
         {
           send_notification("error", "Отсутствует процесс регистрации, требующий подтверждения.");
           open_registration_menu();
           return;
         }
-        // Обработка невведённого кода
-        if (verifyCode.length < inputs.length) {
+        // Обработка не введённого кода
+        if (verifyCode.length < verificationInputs.length) {
           send_notification("error", "Введите код полностью перед отправкой.")
           return;
         }
 
         open_loading();
-        const verify_response = await send_data_to_webclient("/registration", {
-          verifyCode: verifyCode
-        }, registrationToken);
+        const verify_response = await send_data_to_webclient("registration", {
+          verifyCode: verifyCode,
+        }, registrationToken, function (message) {
+          send_notification("error", message);
+        });
 
         // Обрабатываем ошибки регистрации
           if (!verify_response) {
@@ -677,22 +692,29 @@
             send_notification("error", "Ошибка подтверждения.");
             return;
           }
-        if (verify_response["success_state"] !== "success") {
+        if (verify_response["success_state"] != "success") {
           open_registration_verifing();
           send_notification("error", verify_response["message"])
           return;
         }
         // Если регистрация успешна, удаляет токен регистрации и переходим в меню входа
         delete_cookie("registrationToken");
+        send_notification("success", verify_response["message"]);
         open_authorization_menu();
       }
       
       // Отправка уведомления о процессах
       function send_notification(type, text) {
-        notification.textContent = text;
+        notificationContent.textContent = text;
 
-        notification.classList.remove(type == "error" ? "success" : "error");
-        notification.classList.add(type == "error" ? "success" : "error");
+        if (type === "error") {
+          notification.classList.remove("success");
+          notification.classList.add("error");
+        }
+        else {
+          notification.classList.remove("error");
+          notification.classList.add("success");
+        }
 
         notification.classList.add("hidden");
         notification.classList.remove("hidden");
@@ -715,10 +737,10 @@
       }
 
       // Работа с куки локально
-      function save_сookie(name, value, days, path = "/") {
+      function save_cookie(name, value, milliseconds, path = "/") {
         const date = new Date();
-        date.setTime(date.getTime() + (days * 24 * 60 * 60 * 1000));
-        document.cookie = `${name}"="${value}; expires=${date.toUTCString()}; path=${path}`;
+        date.setTime(date.getTime() + (milliseconds));
+        document.cookie = `${name}=${value}; expires=${date.toUTCString()}; path=${path}`;
       }
       function get_cookie(name) {
         // Получаем все куки как строку
@@ -781,6 +803,7 @@
 
         // Вывод информации
         notification = document.getElementById("notification");
+        notificationContent = document.getElementById("notificationContent");
 
         // Кнопка ввода
         entryButton = document.getElementById("entryButton");
@@ -794,7 +817,11 @@
         document.getElementById("yandexAuth").onclick = auth_with_yandex;
 
         // Ставит ивент на кнопку закрытия уведомления
-        document.getElementById("closeNotification").onclick = close_notification;
+        const closeNotification = document.getElementById("closeNotification");
+        closeNotification.addEventListener('click', function(event) {
+            event.preventDefault(); // Отменяем стандартное действие
+        });
+        closeNotification.onclick = close_notification;
 
         // Настройка страницы в завиимости от Имени.
         const user_name = " <!--Name--> ";

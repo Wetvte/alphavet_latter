@@ -68,7 +68,7 @@ app.get("/", async (req, res) => {
   // Получаем токен сессии из cookie запроса
   const sessionToken = req.cookies["sessionToken"];
   // Переменная данных о статусе и другом пользователя
-  const user = sessionToken && sessionToken.length > 0 ? (await get_redis_user(sessionToken)) : undefined;
+  let user = sessionToken && sessionToken.length > 0 ? (await get_redis_user(sessionToken)) : undefined;
   console.log("Получен пользователь :", user, "благодаря токену сессии", sessionToken);
   // Если пользователь авторизирован
   if (user && user["status"] === "Authorized") {
@@ -78,13 +78,23 @@ app.get("/", async (req, res) => {
     // Если данные успешно проверены/обновлены/получены и т.д.
       console.log("Одобрен запрос на обновление данных пользователя " + user["name"]);
     if (update_response.data["update_result"] === "success") {
-      change_redis_session(sessionToken, {
+      user = await change_redis_session(sessionToken, {
         id: update_response.data["id"],
         name: update_response.data["name"],
         email: update_response.data["email"],
         refreshToken: update_response.data["refreshToken"]
       })
-      return res.sendFile("C:\\Users\\Admin\\Desktop\\WetvteGitClone\\alphavet_latter\\WebClient\\frontend\\cabinet.html");
+      // Читаем файл страницы ЛК
+      fs.readFile("C:\\Users\\Admin\\Desktop\\WetvteGitClone\\alphavet_latter\\WebClient\\frontend\\cabinet.html", 'utf8', (err, page) => {
+        if (err) {
+          return res.status(500).send('Ошибка чтения файла: ' + err.message);
+        }
+        // Заменяем строку имени
+        page = page.replace(" <!--UserData--> ", user);
+        // Отправляем изменённый контент клиенту
+        res.setHeader("Content-Type", "text/html; charset=utf-8");
+        return res.send(page);
+      });
     }
     // Если токены истекли/ошибка обновления
     else {
@@ -300,12 +310,15 @@ app.post("/login", async (req, res) => {
 
 // Маршрут для регистрации ("/registration")
 app.post("/registration", async (req, res) => {
+  console.log("Пользователь обратился к странице /registration");
   // Получаем токен регистрации
   const token = get_token_from_header(req.headers.authorization);
   // Если регистрация на этапе обычного запроса
   if (!token/*stage === "filling"*/) {
+    console.log("Проверяем доступность регистрации.");
     const {email, name, password, repeat_password} = req.body;
     const registration_response = await post_registration_request(email, name, password, repeat_password);
+    console.log("Результат: " + registration_response.data["access_state"]);
     if (registration_response.data["access_state"] === "allowed") {
       return res.send(JSON.stringify({
         access_state: "allowed",
@@ -322,8 +335,10 @@ app.post("/registration", async (req, res) => {
   }
   // Если регистрация на этапе подтверждения
   else /*stage === "verifing"*/ {
+    console.log("Проверяем код подтверждения.");
     const { verifyCode } = req.body;
     const verify_response = await post_registration_verify_request(verifyCode, token);
+    console.log("Результат: " + verify_response.data["success_state"]);
     return res.send(JSON.stringify({
       access_state: verify_response.data["success_state"],
       message: verify_response.data["message"]
@@ -335,12 +350,15 @@ app.post("/registration", async (req, res) => {
 function get_token_from_header(header) // header authorization
 {
   if (!header || header === "") {
+    console.log("Токен не получен из-за некорректности заголовка (1).");
     return;
   }
   const parts = header.split(" ");
-  if (parts.legth !== 2 || parts[1].legth === 0) {
+  if (parts.length !== 2 || parts[1].length === 0) {
+    console.log("Токен не получен из-за некорректности заголовка (2).");
     return;
   }
+  console.log("Получен токен регистрации: " + parts[1] + " из заголовка " + header);
   return parts[1];
 }
 
@@ -384,6 +402,13 @@ app.get("/logout", async (req, res) => {
   // Перенаправляем на главную страницу
   return res.redirect("/");
 });
+app.get("/data", async (req, res) => {
+  const sessionToken = req.cookies["sessionToken"];
+  console.log("Потытка отдать данные по токену", sessionToken);
+  if (!sessionToken) return;
+  const user = await get_redis_user(sessionToken);
+  res.send(JSON.stringify(user));
+});
 
 /* Создание токенов сессии и входа */
 // Сделать рандомный токен (строку)
@@ -406,7 +431,7 @@ async function get_redis_user(key_token) {
   console.log("Got user", userJSON, "by token", key_token);
   try {
     // Пытаемся запарсить до json файла данные пользователя
-    const user = JSON.parse(userJSON);
+    const user = await JSON.parse(userJSON);
     console.log("JSON parsed user data:", user);
     return user;
   } catch (parseErr) {
@@ -441,7 +466,7 @@ async function change_redis_session(key_token, new_data) {
   }
   try {
     // Пытаемся запарсить до json файла данные пользователя
-    const user = JSON.parse(userJSON);
+    const user = await JSON.parse(userJSON);
     // Меняем
     const new_user = {...user, ...new_data};
     await redisClient.set(key_token, JSON.stringify(new_user));

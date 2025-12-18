@@ -54,25 +54,21 @@
       margin: 0 auto 25px;
       max-width: 90%;
     }
-
     .user-info {
       padding: 0 40px 25px;
     }
-
-    .info-row {
+    .user-info-row {
       display: flex;
       justify-content: space-between;
       margin-bottom: 15px;
       font-size: 16px;
       color: #4d4a4a;
     }
-
-    .label {
+    .user-label {
       font-weight: bold;
       min-width: 100px;
     }
-
-    .value {
+    .user-info-value {
       color: #333;
       flex-grow: 1;
     }
@@ -84,7 +80,7 @@
       justify-content: center;
     }
 
-    .btn {
+    .button {
       padding: 12px 24px;
       border: none;
       border-radius: 6px;
@@ -94,17 +90,17 @@
       transition: all 0.3s ease;
     }
 
-    .btn-logout {
+    .button.logout {
       background-color: #0b55b7;
       color: white;
     }
 
-    .btn-logout-all {
+    .button.logout-all {
       background-color: #d80303;
       color: white;
     }
 
-    .btn:hover {
+    .button:hover {
       transform: translateY(-2px);
       box-shadow: 0 5px 15px rgba(0, 0, 0, 0.2);
     }
@@ -146,27 +142,26 @@
 
       <!-- Данные пользователя -->
       <div class="user-info">
-        <div class="info-row">
-          <span class="label">Никнейм:</span>
-          <span class="value">Иван_Петров</span>
+        <div class="user-info-row">
+          <span class="user-label">Никнейм:</span>
+          <span id="nameText" class="user-info-value">Unknown</span>
         </div>
-        <div class="info-row">
-          <span class="label">Почта:</span>
-          <span class="value">ivan.petrov@example.com</span>
+        <div class="user-info-row">
+          <span class="user-label">Почта:</span>
+          <span id="emailText" class="user-info-value">Not linked</span>
         </div>
         <div class="divider"></div>
       </div>
 
       <!-- Кнопки выхода -->
       <div class="logout-buttons">
-        <button class="btn btn-logout" onclick="location.href='/logout.html'">
+        <button id="logoutButton" class="button logout" onclick="location.href='/logout.html'">
           Выход
         </button>
-        <button class="btn btn-logout-all" onclick="location.href='/logout.html?all=true'">
+        <button id="logoutAllButton" class="button logout-all" onclick="location.href='/logout.html?all=true'">
           Выход со всех устройств
         </button>
       </div>
-      <div class="divider"></div>
 
       <!-- Раздел "На главную" -->
       <div class="section">
@@ -209,9 +204,88 @@
 
       <!-- Подвал -->
       <div class="footer">
-        Иванов Иван Иванович
+        Сигарёв Глеб Андреевич, ПИ-251(1).
       </div>
     </div>
   </div>
+
+  <script>
+    let nameText;
+    let emailText;
+
+    let logoutButton;
+    let logoutAllButton;
+
+    const web_server_url = "http://localhost:3000";
+    // Отправка пост запросов к Web Client"у (возвращает response)
+    async function send_data_to_webclient(page, data={}, token=undefined, error_callback=undefined) {
+        const target_url = `${web_server_url}/${page}`;
+        console.log("Отправка данных по URL: " + target_url)
+        try {
+            const response = await fetch(target_url, {
+                method: "POST",
+                headers: token ? {
+                "Authorization": "Bearer " + token,
+                "Content-Type": "application/json"
+                } : {
+                "Content-Type": "application/json"
+                },
+                body: JSON.stringify(data),
+                credentials: "include" // для передачи куки
+            });
+            if (!response.ok) {
+            if (error_callback) error_callback("Ошибка при приёме данных.");
+            return;
+            }
+            return await response.json(); // Возвращаем json с данными, как ответ
+        } catch (error) {
+            if (error_callback) error_callback("Ошибка при приёме данных.");
+        }
+    }
+    async function get_data_from_webclient(page, error_callback=undefined) {
+        const target_url = `${web_server_url}/${page}`;
+        console.log("Получение данных по URL: " + target_url)
+        try {
+            const response = await fetch(target_url, {
+                method: "GET",
+                headers: {
+                  "Content-Type": "application/json",
+                },
+                credentials: "include" // для передачи куки
+            });
+            if (!response.ok) {
+              if (error_callback) error_callback("Ошибка при приёме данных.");
+              return;
+            }
+            return await response.json(); // Возвращаем json с данными, как ответ
+        } catch (error) {
+            if (error_callback) error_callback("Ошибка при приёме данных.");
+        }
+    }
+
+    function logout() {
+      window.location.href = web_server_url + "/logout";
+    }
+    function logout_all() {
+      window.location.href = web_server_url + "/logout?all=true";
+    }
+
+    document.addEventListener("DOMContentLoaded", async function() {
+      nameText = document.getElementById("nameText");
+      emailText = document.getElementById("emailText");
+
+      const data_response = await get_data_from_webclient("data");
+      if (!data_response) logout();
+
+      nameText.textContent = data_response["name"];
+      emailText.textContent = data_response["email"];
+
+      logoutButton = document.getElementById("logoutButton");
+      logoutAllButton = document.getElementById("logoutAllButton");
+
+      logoutButton.onclick = logout;
+      logoutAllButton.onclick = logout_all;
+    });
+  </script>
 </body>
 </html>

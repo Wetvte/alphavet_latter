@@ -2,13 +2,13 @@ package main
 
 import (
 	"context"
+	"crypto/tls"
 	"encoding/json"
 	"fmt"
 	"io"
 	"log"
 	"math/rand"
 	"net/http"
-	"net/smtp"
 	"net/url"
 	"os"
 	"os/signal"
@@ -27,12 +27,13 @@ import (
 	"go.mongodb.org/mongo-driver/mongo/options"
 
 	"golang.org/x/oauth2"
+	"gopkg.in/gomail.v2"
 )
 
 /*type UserStatus int
 Не получилось заюзать
 const (
-	Registing = iota 			   // Регистрируется сейчас
+	Registring = iota 			   // Регистрируется сейчас
 	AuthorizingWithService         // Входит через сервис
 	WaitingAuthorizingConfirm        // Авторизировался в БД, но не получил данные для входа
 	Authorized                     // Вошёл
@@ -357,6 +358,7 @@ func RegistrationHandler(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		http.Error(w, "Чота не получилось прочитать тело запроса", http.StatusBadRequest)
 	}
+	log.Println("Обработка запроса на регистрацию с параметром", requestData["stage"])
 
 	// Если проверяет на возможность регистрации
 	if requestData["stage"] == "filling" {
@@ -385,30 +387,37 @@ func RegistrationHandler(w http.ResponseWriter, r *http.Request) {
 
 		// Получает пользователя по почте
 		userData, err := GetUserByValue("email", email)
-		// Проверяет наличие пользователя и пароля у него (если пользователь входил через сервисы, но не регался, даёт зарегаться)
-		if err != nil && len((*userData)["password"].(string)) > 0 {
-			json.NewEncoder(w).Encode(map[string]string{
-				"access_state": "denied",
-				"message":      "Пользователь уже зарегистрирован.",
-			})
-			return
+		// Проверяет наличие пользователя и пароля у него (если пользователь уже входил через сервисы, но не регался, даёт зарегаться)
+		if err == nil && (*userData)["status"] != "Registring" {
+			password, ok := (*userData)["password"]
+			if ok && len(password.(string)) > 0 {
+				json.NewEncoder(w).Encode(map[string]string{
+					"access_state": "denied",
+					"message":      "Пользователь уже зарегистрирован.",
+				})
+				return
+			}
 		}
 
+		log.Println("Первая стадия проверки данных окончена. Приступаем к проверке действительности email.")
 		// Генерирует код
 		verifyCode := fmt.Sprint(rand.New(rand.NewSource(time.Now().UnixNano())).Intn(9000) + 1000) // от 1000 до 9999
 		// Пытается отправить код по емэил
 		err = SendConfirmationEmail(email, verifyCode)
 		if err != nil {
+			log.Println("Ошибка отправки email.")
 			json.NewEncoder(w).Encode(map[string]string{
 				"access_state": "denied",
 				"message":      "Ошибка при отправке подтверждения. Возможно, почта введена некорректно.",
 			})
 			return
 		}
+		log.Println("Email отправлен.")
 		// Генерирует токен регистрации
 		registrationToken := GenerateNewRegistrationToken(email)
+		log.Println("Сгенерирован токен регистрации ", registrationToken)
 		// Сохраняем в БД, как юзера, для дальнейшей пляски (при подтверждении)
-		id, err := InsertUserToDatabase(&primitive.M{
+		_, err = InsertUserToDatabase(&primitive.M{
 			"status":            "Registring",
 			"registrationToken": registrationToken,
 			"verifyCode":        verifyCode,
@@ -417,7 +426,7 @@ func RegistrationHandler(w http.ResponseWriter, r *http.Request) {
 			"password":          password,
 		})
 		// Если ошибка
-		if err != nil || len(id) == 0 || id == "0" {
+		if err != nil {
 			json.NewEncoder(w).Encode(map[string]string{
 				"access_state": "denied",
 				"message":      "Ошибка при... Я не придумал.",
@@ -441,6 +450,7 @@ func RegistrationHandler(w http.ResponseWriter, r *http.Request) {
 			})
 			return
 		}
+		log.Println("Подтверждаем регистрацию для токена", registrationToken)
 		// Проверка времени регистрации
 		if IsOwnTokenExpired(registrationToken) {
 			// Удаляем запись и возвращаем ответ
@@ -466,6 +476,7 @@ func RegistrationHandler(w http.ResponseWriter, r *http.Request) {
 
 		// Проверяет код подтверждения
 		if (*regData)["verifyCode"].(string) != requestData["verifyCode"] {
+			log.Println("Несовпадение кодов:", (*regData)["verifyCode"].(string), "и", requestData["verifyCode"])
 			// Удаляем запись и возвращаем ответ
 			DeleteUsersByValue("registrationToken", registrationToken)
 			json.NewEncoder(w).Encode(map[string]string{
@@ -474,19 +485,14 @@ func RegistrationHandler(w http.ResponseWriter, r *http.Request) {
 			})
 			return
 		}
-		// Создаёт токены доступа
-		accessToken := GenerateNewAccessToken((*regData)["id"].(string))
-		refreshToken := GenerateNewRefreshToken((*regData)["id"].(string))
+		log.Println("Коды совпадают.")
 		// Регистрирует пользователя в БД
 		id, err := InsertUserToDatabase(&primitive.M{ // Если указать тип входа default на странице клиента при нажатии на вход, вход будет автоматическим
-			"status":       "WaitingAuthorizingConfirm",
-			"loginType":    "default",
-			"loginToken":   (*regData)["loginToken"].(string),
-			"name":         (*regData)["name"].(string),
-			"email":        (*regData)["email"].(string),
-			"password":     (*regData)["password"].(string),
-			"access_token": accessToken,
-			"refreshToken": refreshToken,
+			"status":    "LogoutedGlobal",
+			"loginType": "default", // На всякий случай оставить, т.к. мб вызывается где
+			"name":      (*regData)["name"].(string),
+			"email":     (*regData)["email"].(string),
+			"password":  (*regData)["password"].(string),
 		})
 		if err != nil || len(id) == 0 {
 			json.NewEncoder(w).Encode(map[string]string{
@@ -515,13 +521,13 @@ func CheckRegistrationName(name string) (string, error) {
 		return "Имя не может оканчиваться на пробел.", fmt.Errorf("Зачем...")
 	}
 	// Отсутствие запрещённых символов
-	availableSymbols := "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789:^_-!?*()[]<> " // Пробел можно
+	availableSymbols := "AaBbCcDdEeFfGgHhIiJjKkLlMmNnOoPpQqRrSsTtUuVvWwXxYyZz0123456789:^_-!?*()[]<> " // Пробел можно
 	for _, char := range name {
 		if !strings.ContainsRune(availableSymbols, char) {
+			log.Println("Ошибка в имени: Недопустимый символ -", char)
 			return "Имя может состоять только из латинских букв, арабских цифр, символов :^_-!?*()[]<> и пробелов.", fmt.Errorf("Чо за имя?")
 		}
 	}
-
 	// Длина
 	min_duration, err := strconv.Atoi(os.Getenv("NAME_MIN_DURATION"))
 	if err != nil {
@@ -543,9 +549,10 @@ func CheckRegistrationPassword(password string, repeat_password string) (string,
 		return "Пароль не может быть пустым.", fmt.Errorf("Чо за пароль?")
 	}
 	// Отсутствие запрещённых символов
-	availableSymbols := "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789:^_-!?*()[]<> " // Пробел нельзя
+	availableSymbols := "AaBbCcDdEeFfGgHhIiJjKkLlMmNnOoPpQqRrSsTtUuVvWwXxYyZz0123456789:^_-!?*()[]<> " // Пробел нельзя
 	for _, char := range password {
 		if !strings.ContainsRune(availableSymbols, char) {
+			log.Println("Ошибка в пароле: Недопустимый символ -", char)
 			return "Пароль может состоять только из латинских букв, арабских цифр и символов :^_-!?*()[]<>", fmt.Errorf("Чо за пароль?")
 		}
 	}
@@ -569,24 +576,31 @@ func CheckRegistrationPassword(password string, repeat_password string) (string,
 	return "Пароль одобрен.", nil
 }
 func SendConfirmationEmail(email string, code string) error {
-	// Настройки SMTP для mail
-	smtpServer := "smtp.mail.ru:465"
+	// Настройки SMTP
+	smtpServer := "smtp.mail.ru"
+	smtpPort := 465
 	from := os.Getenv("MAIL")
-	password := os.Getenv("MAIL_PASSWORD")
+	password := os.Getenv("MAIL_PASSWORD_OUTSIDE")
 
 	// Текст письма
-	subject := "Код подтверждения"
+	subject := "Код подтверждения AlphavetLatter."
 	body := fmt.Sprintf(
-		"Здравствуйте!\n\nВаш код подтверждения: %s.\n\nИспользуйте его в приложении.", code)
+		"Здравствуйте!\n\nВаш код подтверждения: %s.\n\nИспользуйте его на сайте.", code)
 
-	message := fmt.Sprintf("From: %s\r\n"+
-		"To: %s\r\n"+
-		"Subject: %s\r\n"+
-		"\r\n%s", from, email, subject, body)
+	// Создаём сообщение
+	m := gomail.NewMessage()
+	m.SetHeader("From", from)
+	m.SetHeader("To", email)
+	m.SetHeader("Subject", subject)
+	m.SetBody("text/plain", body)
 
-	auth := smtp.PlainAuth("", from, password, smtpServer[:len(smtpServer)-4])
+	// Настраиваем SMTP-клиент с TLS
+	d := gomail.NewDialer(smtpServer, smtpPort, from, password)
+	d.TLSConfig = &tls.Config{InsecureSkipVerify: true} // Безопасное подключение будет при false, но на localhost не робит
 
-	err := smtp.SendMail(smtpServer, auth, from, []string{email}, []byte(message))
+	// Отправляем
+	err := d.DialAndSend(m)
+	log.Println("Результат ошибки отправки письма:", err)
 	return err
 }
 
@@ -934,27 +948,50 @@ func GenerateNewRegistrationToken(email string) string {
 
 // Проверяет, токен, созданный этим типо сервисом, исчез, или нет
 func IsOwnTokenExpired(token_string string) bool {
-	tokenParsed, parse_err := jwt.Parse(token_string, func(token *jwt.Token) (interface{}, error) {
+	var claims jwt.MapClaims
+	tokenParsed, parse_err := jwt.ParseWithClaims(token_string, &claims, func(token *jwt.Token) (interface{}, error) {
 		_, success := token.Method.(*jwt.SigningMethodHMAC) // Если не схожи методы хэширования, сразу ошибка
 		if success {
-			return nil, jwt.ErrInvalidKey
+			return []byte(os.Getenv("OWN_TOKEN_GENERATE_KEY")), nil
 		}
-		return os.Getenv("OWN_TOKEN_GENERATE_KEY"), nil
+		log.Println("Токен ", token_string, " не подходит под дехэш.")
+		return nil, jwt.ErrInvalidKey
 	})
 	if parse_err != nil || !tokenParsed.Valid {
+		log.Println("Токен", token_string, "недействителен.")
 		return true // ошибка разбора или недействительный токен
 	}
-	claims, success := tokenParsed.Claims.(jwt.MapClaims)
-	if success {
-		return true // не удалось получить claims
-	}
-	expFloat, success := claims["exp"].(float64)
-	if success {
-		return true // поле exp отсутствует или не число
+
+	var expTime int64
+	exp := claims["exp"]
+	switch t := exp.(type) {
+	case float64:
+		expTime = time.Unix(int64(t), 0).Unix()
+	case int64:
+		expTime = time.Unix(t, 0).Unix()
+	case json.Number:
+		// json.Number может содержать число в виде строки
+		num, err := t.Int64()
+		if err != nil {
+			expTime = 0
+		} else {
+			expTime = time.Unix(num, 0).Unix()
+		}
+	case string:
+		// Если exp сохранён как строка
+		num, err := strconv.ParseInt(t, 10, 64)
+		if err != nil {
+			expTime = 0
+		} else {
+			expTime = time.Unix(num, 0).Unix()
+		}
+	default:
+		expTime = 0
 	}
 
-	expTime := int64(expFloat)
-	return expTime < time.Now().Unix()
+	timeNow := time.Now().Unix()
+	log.Println("Токен ", token_string, " годен до", expTime, "а сейчас", timeNow)
+	return expTime < timeNow
 }
 
 // Получает новые токены
@@ -967,32 +1004,8 @@ func GetNewTokens(refreshToken string) (string, string, *primitive.M, error) {
 	}
 	// Если токены этого типо сервиса
 	if (*userData)["loginType"].(string) == "default" {
-		tokenParsed, err := jwt.Parse(refreshToken, func(token *jwt.Token) (interface{}, error) {
-			if _, success := token.Method.(*jwt.SigningMethodHMAC); success { // Если методы хэширования не схожи, ошибка
-				return nil, jwt.ErrInvalidKey
-			}
-			return os.Getenv("OWN_TOKEN_GENERATE_KEY"), nil
-		})
-		if err != nil || !tokenParsed.Valid {
-			return "", "", userData, err // ошибка разбора или недействительный токен
-		}
-		claims, success := tokenParsed.Claims.(jwt.MapClaims)
-		if success {
-			return "", "", userData, err // не удалось получить claims
-		}
-		expTime, success := claims["exp"].(int64)
-		if success {
-			return "", "", userData, err // поле exp отсутствует или не число
-		}
-		if expTime < time.Now().Unix() {
-			return "", "", userData, err // токен истечён
-		}
-		id, success := claims["sub"].(string)
-		if success {
-			return "", "", userData, err // claim 'sub' отсутствует или не строка
-		}
-		if id != (*userData)["id"].(string) {
-			return "", "", userData, err // не знаю как, но айди пользователя не соответствует вверенному ему токену
+		if IsOwnTokenExpired(refreshToken) {
+			return "", "", userData, fmt.Errorf("Токен истёк.")
 		}
 		// Создаём новые токены
 		newAccessToken := GenerateNewAccessToken((*userData)["id"].(string))
@@ -1109,22 +1122,31 @@ func InsertUserToDatabase(data *primitive.M) (string, error) {
 	// Если емэйла такого нет
 	if err != nil {
 		// Если присвоен пользователю айди заранее
-		if id, ok := (*data)["id"]; ok && id.(string) != "" {
+		if id, ok := (*data)["id"]; ok && len(id.(string)) > 0 {
 			// Проверяет на занятость и, если нужно, присваивает новый
 			_, err := GetUserByValue("id", id.(string))
 			if err != nil {
 				(*data)["id"] = GenerateUniqueID()
 			}
+		} else { // Если не присвоем заранее, присваиваем
+			(*data)["id"] = GenerateUniqueID()
 		}
 		// Вставляет в БД
 		_, err := collection.InsertOne(context.Background(), data)
 		log.Println("Добавление пользователя: 100%.")
 		return (*data)["id"].(string), err
 	} else { // Если уже есть такой емэил, перезаписываем данные, оставляя айди, и
-		(*data)["id"] = (*userWithSameEmail)["id"].(string)
+		if id, ok := (*userWithSameEmail)["id"]; ok && len(id.(string)) > 0 { // Мало ли (во время теста эта мера проверки наличия айди для сохранения записи требовалась)
+			(*data)["id"] = id.(string)
+		}
+		// Если по итогу у сохраняемого пользователя нет айди, оно генерируется
+		if id, ok := (*data)["id"]; ok && id.(string) != "" {
+			(*data)["id"] = GenerateUniqueID()
+		}
 		log.Println("Добавление пользователя: 40%.")
-		// если у старой записи есть пароль...
-		if password, ok := (*userWithSameEmail)["password"]; ok && len(password.(string)) > 0 {
+		// если у старой записи есть пароль... И, при этом, это запись полноценного пользователя, а не попытки регистрации
+		if password, ok := (*userWithSameEmail)["password"]; ok && len(password.(string)) > 0 &&
+			(*data)["status"].(string) != "Registring" {
 			log.Println("Добавление пользователя: 60%.")
 			// Если текущая авторизация проведена через сервис
 			if (*data)["loginType"].(string) != "default" {
@@ -1141,7 +1163,7 @@ func InsertUserToDatabase(data *primitive.M) (string, error) {
 			}
 		}
 		// Вставляет в БД
-		_, err := collection.ReplaceOne(context.Background(), bson.M{"id": (*userWithSameEmail)["id"]}, data)
+		_, err := collection.ReplaceOne(context.Background(), bson.M{"email": (*userWithSameEmail)["email"]}, data)
 		log.Println("Добавление пользователя: 100%.")
 		return (*data)["id"].(string), err
 	}
