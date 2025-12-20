@@ -69,19 +69,21 @@ app.get("/", async (req, res) => {
   const sessionToken = req.cookies["sessionToken"];
   // Переменная данных о статусе и другом пользователя
   let user = sessionToken && sessionToken.length > 0 ? (await get_redis_user(sessionToken)) : undefined;
-  console.log("Получен пользователь :", user, "благодаря токену сессии", sessionToken);
+  //console.log("Получен пользователь :", user, "благодаря токену сессии", sessionToken);
   // Если пользователь авторизирован
   if (user && user["status"] === "Authorized") {
     /// Отправляем рефреш токен с целью обновить данные
     console.log("Отправлен запрос на обновление данных пользователя " + user["name"]);
-    const update_response = await post_autho_update_request(user["refreshToken"]);
+    const update_response = await post_autho_update_request(user["accessToken"]);
     // Если данные успешно проверены/обновлены/получены и т.д.
-      console.log("Одобрен запрос на обновление данных пользователя " + user["name"]);
     if (update_response.data["update_result"] === "success") {
+      console.log("Одобрен запрос на обновление данных пользователя " + user["name"]);
+      // Обновляет запись пользователя
       user = await change_redis_session(sessionToken, {
         id: update_response.data["id"],
         name: update_response.data["name"],
         email: update_response.data["email"],
+        accessToken: update_response.data["accessToken"],
         refreshToken: update_response.data["refreshToken"]
       })
       // Читаем файл страницы ЛК
@@ -93,8 +95,10 @@ app.get("/", async (req, res) => {
         page = page.replace(" <!--UserData--> ", user);
         // Отправляем изменённый контент клиенту
         res.setHeader("Content-Type", "text/html; charset=utf-8");
-        return res.send(page);
+        console.log("Страница личного кабинета подготовлена и отправляется...")
+        res.send(page);
       });
+      return;
     }
     // Если токены истекли/ошибка обновления
     else {
@@ -136,7 +140,7 @@ app.get("/login", async (req, res) => {
 
   // Получает цель визита. 
   let target = req.query.target;
-  console.log("Начальная цель -", target);
+  console.log("Начальная цель автовхода -", target);
   // Если цель - отмена (Пользователь нажал "нет" в подтверждении)
   if (target === "cancel") {
     // Удаляем и уходим ^_^
@@ -149,6 +153,7 @@ app.get("/login", async (req, res) => {
   if (!target || target != "confirm") {
     target = "check";
   }
+  console.log("После обработки -", target);
 
   // Если цель - проверка
   if (target == "check") {
@@ -212,7 +217,8 @@ app.get("/login", async (req, res) => {
       return res.redirect("/");
     }
     // Проверяем наличие необходимых токенов
-    if (!confirm_response.data["accessToken"] || !confirm_response.data["refreshToken"]) {
+    if (!confirm_response.data["accessToken"] ||
+        (!confirm_response.data["refreshToken"] && confirm_response.data["loginType"] != "github")) {
       console.error("Э, а где токены, йоу? Ты вернул "
         + confirm_response.data["accessToken"] + " ИиИ " + confirm_response.data["refreshToken"]);
       delete_redis_session(sessionToken);
@@ -226,6 +232,7 @@ app.get("/login", async (req, res) => {
       id: confirm_response.data["id"],
       email: confirm_response.data["email"],
       name: confirm_response.data["name"],
+      accessToken: confirm_response.data["accessToken"],
       refreshToken: confirm_response.data["refreshToken"]
     });
     return res.redirect("/");
@@ -286,6 +293,7 @@ app.post("/login", async (req, res) => {
     auth_response = await post_default_auth_request(email, password, loginToken);
     // Если успешно, сохраняем в сессию
     if (auth_response.data["success_state"] === "success") {
+      console.log("Авторизация через код успешна.")
       res.cookie("sessionToken", sessionToken)
     }
     // Возвращаем результат авторизации кодом, чтобы челик знал, что он не так сделал (или так)
@@ -340,7 +348,7 @@ app.post("/registration", async (req, res) => {
     const verify_response = await post_registration_verify_request(verifyCode, token);
     console.log("Результат: " + verify_response.data["success_state"]);
     return res.send(JSON.stringify({
-      access_state: verify_response.data["success_state"],
+      success_state: verify_response.data["success_state"],
       message: verify_response.data["message"]
     }));
   }
@@ -392,7 +400,7 @@ app.get("/logout", async (req, res) => {
   const { all } = req.query;
   // Выход со всех устройств
   if (all === "true") {
-    await post_logout_request(user["refreshToken"])
+    await post_logout_request(user["accessToken"])
   }
   
   // Удаляем запись по ключу token
@@ -571,22 +579,22 @@ async function post_default_auth_request(email, password, loginToken) {
   );
 }
 // Отправить запрос на модуль Авторизации, связанный получением актуальной информации
-async function post_autho_update_request(refreshToken) {
+async function post_autho_update_request(accessToken) {
   return await axios.post(process.env.AUTHORIZATION_MODULE_URL + "/update_auth", {},
     {
       headers: {
-        "Authorization": `Bearer ${refreshToken}`,
+        "Authorization": `Bearer ${accessToken}`,
         "Content-Type": "application/json"
       }
     }
   );
 }
 // Отправить запрос на модуль Авторизации, связанный с полным выходом
-async function post_logout_request(refreshToken) { 
+async function post_logout_request(accessToken) { 
   return await axios.post(process.env.AUTHORIZATION_MODULE_URL + "/logout_all", {},
   {
     headers: {
-      "Authorization": `Bearer ${refreshToken}`,
+      "Authorization": `Bearer ${accessToken}`,
       "Content-Type": "application/json"
     }
   }

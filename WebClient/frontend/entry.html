@@ -742,19 +742,28 @@
         date.setTime(date.getTime() + (milliseconds));
         document.cookie = `${name}=${value}; expires=${date.toUTCString()}; path=${path}`;
       }
-      function get_cookie(name) {
+      function get_cookie(name) {   
         // Получаем все куки как строку
         const cookies = document.cookie;
         // Разбиваем на массив отдельных куки
-        const cookieArray = cookies.split("; ");
-        // Находим нужное куки по имени
-        const foundCookie = cookieArray.find(cookie => cookie.startsWith(`${name}=`));
-        // Если нашли — извлекаем значение (разделяем по "=" и берём вторую часть)
-        if (foundCookie) {
-            return foundCookie.split("=")[1];
+        const cookieArray = cookies.split(";");
+        for (let cookie of cookieArray) {
+          cookie = cookie.trim();
+          // Находим нужное куки по имени
+          if (cookie.startsWith(`${name}=`)) {
+            console.log("Куки нашёл.");
+            // Если нашли — извлекаем значение (убирая "=" и первую часть)
+            const value = cookie.substring(name.length + 1);
+            try {
+              // Декодируем закодированные спец символы
+                return decodeURIComponent(value);
+            } catch (e) {
+                return value;
+            }
+          }
         }
         // Если не нашли
-        return undefined;
+        return null;
       }
       function delete_cookie(name, path = "/") {
           document.cookie = `${name}=; expires=Thu, 01 Jan 1970 00:00:00 GMT; path=${path}`;
