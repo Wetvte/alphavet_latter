@@ -1,0 +1,13 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<Project ToolsVersion="17.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <ItemGroup>
+    <CustomBuild Include="C:\Users\Admin\Desktop\WetvteGitClone\alphavet_latter\TestProcessing\build\CMakeFiles\6ff4f412046acf8e5760a1dfa8dc20f9\generate.stamp.rule">
+      <Filter>CMake Rules</Filter>
+    </CustomBuild>
+  </ItemGroup>
+  <ItemGroup>
+    <Filter Include="CMake Rules">
+      <UniqueIdentifier>{BDCCBB7A-83D7-3807-A83F-521083E1C4FB}</UniqueIdentifier>
+    </Filter>
+  </ItemGroup>
+</Project>

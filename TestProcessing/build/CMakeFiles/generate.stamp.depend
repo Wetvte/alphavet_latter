@@ -1,0 +1,36 @@
+# CMake generation dependency list for this directory.
+C:/Program Files/CMake/share/cmake-3.26/Modules/CMakeCInformation.cmake
+C:/Program Files/CMake/share/cmake-3.26/Modules/CMakeCXXInformation.cmake
+C:/Program Files/CMake/share/cmake-3.26/Modules/CMakeCommonLanguageInclude.cmake
+C:/Program Files/CMake/share/cmake-3.26/Modules/CMakeDependentOption.cmake
+C:/Program Files/CMake/share/cmake-3.26/Modules/CMakeFindDependencyMacro.cmake
+C:/Program Files/CMake/share/cmake-3.26/Modules/CMakeGenericSystem.cmake
+C:/Program Files/CMake/share/cmake-3.26/Modules/CMakeInitializeConfigs.cmake
+C:/Program Files/CMake/share/cmake-3.26/Modules/CMakeLanguageInformation.cmake
+C:/Program Files/CMake/share/cmake-3.26/Modules/CMakeRCInformation.cmake
+C:/Program Files/CMake/share/cmake-3.26/Modules/CMakeSystemSpecificInformation.cmake
+C:/Program Files/CMake/share/cmake-3.26/Modules/CMakeSystemSpecificInitialize.cmake
+C:/Program Files/CMake/share/cmake-3.26/Modules/Compiler/CMakeCommonCompilerMacros.cmake
+C:/Program Files/CMake/share/cmake-3.26/Modules/Compiler/MSVC-C.cmake
+C:/Program Files/CMake/share/cmake-3.26/Modules/Compiler/MSVC-CXX.cmake
+C:/Program Files/CMake/share/cmake-3.26/Modules/Compiler/MSVC.cmake
+C:/Program Files/CMake/share/cmake-3.26/Modules/FindOpenSSL.cmake
+C:/Program Files/CMake/share/cmake-3.26/Modules/FindPackageHandleStandardArgs.cmake
+C:/Program Files/CMake/share/cmake-3.26/Modules/FindPackageMessage.cmake
+C:/Program Files/CMake/share/cmake-3.26/Modules/FindPostgreSQL.cmake
+C:/Program Files/CMake/share/cmake-3.26/Modules/Platform/Windows-MSVC-C.cmake
+C:/Program Files/CMake/share/cmake-3.26/Modules/Platform/Windows-MSVC-CXX.cmake
+C:/Program Files/CMake/share/cmake-3.26/Modules/Platform/Windows-MSVC.cmake
+C:/Program Files/CMake/share/cmake-3.26/Modules/Platform/Windows.cmake
+C:/Program Files/CMake/share/cmake-3.26/Modules/Platform/WindowsPaths.cmake
+C:/Program Files/CMake/share/cmake-3.26/Modules/SelectLibraryConfigurations.cmake
+C:/Program Files/vcpkg/installed/x64-windows/share/jwt-cpp/jwt-cpp-config-version.cmake
+C:/Program Files/vcpkg/installed/x64-windows/share/jwt-cpp/jwt-cpp-config.cmake
+C:/Program Files/vcpkg/installed/x64-windows/share/jwt-cpp/jwt-cpp-targets.cmake
+C:/Program Files/vcpkg/installed/x64-windows/share/openssl/vcpkg-cmake-wrapper.cmake
+C:/Program Files/vcpkg/scripts/buildsystems/vcpkg.cmake
+C:/Users/Admin/Desktop/WetvteGitClone/alphavet_latter/TestProcessing/CMakeLists.txt
+C:/Users/Admin/Desktop/WetvteGitClone/alphavet_latter/TestProcessing/build/CMakeFiles/3.26.0-rc6/CMakeCCompiler.cmake
+C:/Users/Admin/Desktop/WetvteGitClone/alphavet_latter/TestProcessing/build/CMakeFiles/3.26.0-rc6/CMakeCXXCompiler.cmake
+C:/Users/Admin/Desktop/WetvteGitClone/alphavet_latter/TestProcessing/build/CMakeFiles/3.26.0-rc6/CMakeRCCompiler.cmake
+C:/Users/Admin/Desktop/WetvteGitClone/alphavet_latter/TestProcessing/build/CMakeFiles/3.26.0-rc6/CMakeSystem.cmake

@@ -31,7 +31,7 @@ Config ConfigLoader::load(const std::string& filepath) {
     while (std::getline(file, line)) {
         std::cout << "Get line: " << line << std::endl;
         std::string key, value;
-        if (parseLine(line, key, value)) {
+        if (parse_line(line, key, value)) {
             std::cout << "Splited on: " << key << " and " << value << std::endl;
             config.values[key] = value;
         }
@@ -42,7 +42,7 @@ Config ConfigLoader::load(const std::string& filepath) {
 }
 
 // Вспомогательный метод для парсинга строки вида "ключ=значение"
-bool ConfigLoader::parseLine(const std::string& line, std::string& key, std::string& value) {
+bool ConfigLoader::parse_line(const std::string& line, std::string& key, std::string& value) {
     if (line.empty() || line[0] == '#' || line[0] == ';') {
         return false;  // Пропускаем пустые строки и комментарии
     }

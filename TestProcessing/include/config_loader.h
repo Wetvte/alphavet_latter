@@ -5,7 +5,7 @@
 #include <unordered_map>
 
 // Вспомогательный класс для хранения загруженной конфигурации
-class Config {
+struct Config {
 public:
     std::string get(const std::string& key) const;
 
@@ -23,7 +23,7 @@ public:
 
 private:
     // Вспомогательный метод для парсинга строки "ключ=значение"
-    static bool parseLine(const std::string& line, std::string& key, std::string& value);
+    static bool parse_line(const std::string& line, std::string& key, std::string& value);
 };
 
 #endif

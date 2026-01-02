@@ -1,0 +1,3 @@
+C:/Users/Admin/Desktop/WetvteGitClone/alphavet_latter/TestProcessing/build/CMakeFiles/latter.dir
+C:/Users/Admin/Desktop/WetvteGitClone/alphavet_latter/TestProcessing/build/CMakeFiles/ALL_BUILD.dir
+C:/Users/Admin/Desktop/WetvteGitClone/alphavet_latter/TestProcessing/build/CMakeFiles/ZERO_CHECK.dir

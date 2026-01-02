@@ -5,13 +5,19 @@
 using namespace std;
 
 int main() {
-    std::cout << "Hello!" << std::endl;
     APIServer server;
     std::cout << "API Server created !" << std::endl;
-    server.connect_to_db();
-    std::cout << "API Server connected to db!" << std::endl;
+    server.connectToDatabase();
+    std::cout << "API Server connected to PostgreSQL DB!" << std::endl;
     server.start();
     std::cout << "API Server started!" << std::endl;
     
     return 0;
 }
+
+/*
+g++ main.cpp -o app.exe ^
+  -IC:"C:\Program Files\PostgreSQL\18\include\" ^
+  -LC:"C:\Program Files\PostgreSQL\18\lib\" ^
+  -lpq
+*/

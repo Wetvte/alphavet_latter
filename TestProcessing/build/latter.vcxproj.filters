@@ -1,0 +1,31 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<Project ToolsVersion="17.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <ItemGroup>
+    <ClCompile Include="C:\Users\Admin\Desktop\WetvteGitClone\alphavet_latter\TestProcessing\main.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\Admin\Desktop\WetvteGitClone\alphavet_latter\TestProcessing\src\api_server.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\Admin\Desktop\WetvteGitClone\alphavet_latter\TestProcessing\src\config_loader.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\Admin\Desktop\WetvteGitClone\alphavet_latter\TestProcessing\src\db_connector.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\Admin\Desktop\WetvteGitClone\alphavet_latter\TestProcessing\src\token_decoder.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+  </ItemGroup>
+  <ItemGroup>
+    <CustomBuild Include="C:\Users\Admin\Desktop\WetvteGitClone\alphavet_latter\TestProcessing\CMakeLists.txt" />
+  </ItemGroup>
+  <ItemGroup>
+    <None Include="C:\Users\Admin\Desktop\WetvteGitClone\alphavet_latter\TestProcessing\config\test_config.env" />
+  </ItemGroup>
+  <ItemGroup>
+    <Filter Include="Source Files">
+      <UniqueIdentifier>{BC2B4F47-B8A8-3A18-AC86-46B301B520C6}</UniqueIdentifier>
+    </Filter>
+  </ItemGroup>
+</Project>
