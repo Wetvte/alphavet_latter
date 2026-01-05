@@ -1,23 +1,20 @@
+﻿#include "include/api_server.h"
 #include <iostream>
-#include "src/config_loader.cpp"
-#include "src/api_server.cpp"
+#include <clocale>
+#include <windows.h>
 
-using namespace std;
 
 int main() {
+    // Общая локализация
+    setlocale(LC_ALL, "Russian");
+    SetConsoleCP(CP_UTF8);
+    SetConsoleOutputCP(CP_UTF8);
+
     APIServer server;
     std::cout << "API Server created !" << std::endl;
-    server.connectToDatabase();
+    server.connect_to_db();
     std::cout << "API Server connected to PostgreSQL DB!" << std::endl;
     server.start();
-    std::cout << "API Server started!" << std::endl;
     
     return 0;
 }
-
-/*
-g++ main.cpp -o app.exe ^
-  -IC:"C:\Program Files\PostgreSQL\18\include\" ^
-  -LC:"C:\Program Files\PostgreSQL\18\lib\" ^
-  -lpq
-*/

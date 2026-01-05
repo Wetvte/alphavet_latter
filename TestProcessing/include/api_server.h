@@ -1,4 +1,4 @@
-#ifndef API_SERVER_H
+﻿#ifndef API_SERVER_H
 #define API_SERVER_H
 
 #include "httplib.h"
@@ -6,28 +6,33 @@
 #include "config_loader.h"
 #include "token_decoder.h"
 #include <tuple>
+#include <atomic>
 
 class APIServer {
 public:
     APIServer();
 
-    bool connect_to_db();
+    void connect_to_db();
+    void start();
+    void shutdown();
 
-    bool start();
+    static APIServer* instance;
 
 private:
     Config config;
-    httplib::Server server;
     DBConnector dbConnector;
+    httplib::Server server;
+    std::atomic<bool> shutdowned{false};
 
     void setup_routes();
-    Token get_request_token(const Request & req)
+    Token get_request_token(const httplib::Request &req);
     Token get_header_token(const std::string &header);
     nlohmann::json get_body_json(const std::string &body);
-    void write_response(const Response &res, const std::string &message, const int &status = 200) const;
-    void write_response(const Response &res, nlohmann::json json, const std::string &message, const int &status = 200);
+    void write_response(httplib::Response &res, const std::string &message, const int &status = 200);
+    void write_response(httplib::Response &res, nlohmann::json json, const std::string &message, const int &status = 200);
     
     // Вспомогательные методы
+    std::string build_fullname(const std::string& first_name="", const std::string& last_name="", const std::string& patronymic="");
     std::string build_range(const std::vector<std::string> &ids);
     std::string build_range(const std::vector<int> &ids);
     bool contains(const std::vector<std::string>& array, const std::string& value) const;

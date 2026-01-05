@@ -21,9 +21,6 @@
     <CustomBuild Include="C:\Users\Admin\Desktop\WetvteGitClone\alphavet_latter\TestProcessing\CMakeLists.txt" />
   </ItemGroup>
   <ItemGroup>
-    <None Include="C:\Users\Admin\Desktop\WetvteGitClone\alphavet_latter\TestProcessing\config\test_config.env" />
-  </ItemGroup>
-  <ItemGroup>
     <Filter Include="Source Files">
       <UniqueIdentifier>{BC2B4F47-B8A8-3A18-AC86-46B301B520C6}</UniqueIdentifier>
     </Filter>

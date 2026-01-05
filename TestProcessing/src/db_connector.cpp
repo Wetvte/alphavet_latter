@@ -1,13 +1,12 @@
-#ifndef DB_CONNECTOR
+﻿#ifndef DB_CONNECTOR
 #define DB_CONNECTOR
 
 #include "../include/db_connector.h"
-#include <iostream>
 
 DBConnector::DBConnector() : connection(nullptr) {}
 
 DBConnector::~DBConnector() {
-    if (connection) PQfinish(connection);
+    disconnect();
 }
 
 bool DBConnector::connect(const std::string &host, const std::string &port,
@@ -20,11 +19,12 @@ bool DBConnector::connect(const std::string &host, const std::string &port,
     connection = PQconnectdb(conninfo.c_str());
     return PQstatus(connection) == CONNECTION_OK;
 }
+void DBConnector::disconnect() {
+    if (connection) PQfinish(connection);
+}
 
 // Строка БД
 // Конструктор
-explicit DBRow::Row() { this->data = std::map<std::string, std::string>(); }
-explicit DBRow::Row(const std::map<std::string, std::string> &data) { this->data = data; }
 // Доступ по ключу (с проверкой)
 std::string DBRow::operator[](const std::string &key) const {
     auto it = data.find(key);
@@ -40,7 +40,7 @@ void DBRow::set(const std::string &key, const std::string &value) {
     data[key] = value;
 }
 // Получение сырого map (для интеграции с другим кодом)
-const std::map<std::string, std::string> &DBRow::getMap() const {
+const std::map<std::string, std::string> DBRow::get_map() const {
     return data;
 }
 // Размер (число полей)
@@ -55,127 +55,13 @@ bool DBRow::is_empty() const {
 auto DBRow::begin() const { return data.begin(); }
 auto DBRow::end() const { return data.end(); }
 // Вывод в поток, ну писать шоб
-friend std::ostream &DBRow::operator<<(std::ostream &os, const DBRow &row) {
+std::ostream& operator<<(std::ostream& os, const DBRow& row) {
     os << "{";
-    for (const auto &[k, v] : row.data) {
-        os << k << ": " << v << " ";
+    for (const auto& [key, value] : row.data) { 
+        os << "\n" << key << ": " << value << "; ";
     }
     os << "}";
     return os;
-}
-// Шаблоны преобразования
-template<> std::string Row::get<std::string>(const std::string &key) {
-    return data[key];
-}
-template<> int Row::get<int>(const std::string &key) const {
-    return std::stoi(data[key]);
-}
-template<> std::vector<int> Row::get<std::vector<int>>(const std::string &key) {
-    std::vector<int> result;
-
-    std::string value = data[key];
-    if (value.empty() || value[0] != '\'' || value[value.size()-1] != '\'') {
-        return result;
-    }
-    value = value.substr(1, value.size() - 2);
-    if (value == "{}") {
-        return result;
-    }
-    value = value.substr(1, value.size() - 2);
-    // Теперь у нас строка данных
-
-    std::string current = "";
-    for (char symbol : value) {
-        if (symbol == ' ') {
-            continue;
-        }
-        else if (symbol == ',' || symbol == '}') {
-            result.push_back(stoi(current));
-            current = "";
-        }
-        else {
-            current += symbol;
-        }
-    }
-
-    return result;
-}
-template<> std::vector<std::vector<int>> Row::get<std::vector<std::vector<int>>>(const std::string &key) {
-    std::vector<std::vector<int>> result;
-
-    std::string value = data[key];
-    if (value.empty() || value[0] != '\'' || value[value.size()-1] != '\'') {
-        return result;
-    }
-    value = value.substr(1, value.size() - 2);
-    if (value == "{}") {
-        return result;
-    }
-    value = value.substr(1, value.size() - 2);
-    // Теперь у нас строка данных
-
-    std::string currentParam = "";
-    std::vector<int> currentArray;
-    bool inBraces = false;
-    for (char symbol : value) {
-        if (symbol == '{') {
-            inBraces = true;
-        }
-        else if (symbol == '}') {
-            inBraces = false;
-            if (currentParam != "") {
-                currentArray.push_back(stoi(currentParam));
-                currentParam = "";
-            }
-            result.push_back(currentArray);
-            currentArray.clear();
-        }
-        else if (symbol == ',') {
-            if (inBraces) {
-                currentArray.push_back(stoi(currentParam));
-                currentParam = "";
-            }
-        }
-        else if (symbol != ' ') {
-            currentParam += symbol;
-        }
-    }
-
-    return result;
-}
-template<> std::vector<std::string> Row::get<std::vector<std::string>>(const std::string &key) {
-    std::vector<std::string> result;
-
-    std::string value = data[key];
-    if (value.empty() || value[0] != '\'' || value[value.size()-1] != '\'') {
-        return result;
-    }
-    value = value.substr(1, value.size() - 2);
-
-    if (value == "{}") {
-        return result;
-    }
-    value = value.substr(1, value.size() - 2);
-    // Теперь у нас строка данных
-
-    std::string current = "";
-    bool inQuotes = false;
-    for (char symbol : value) {
-        if (symbol == '"') {
-            if (inQuotes) current += symbol;
-            inQuotes = !inQuotes;
-        }
-        else if (symbol == ',' & &!inQuotes) {
-            result.push_back(current);
-            current = "";
-        }
-        else {
-            current += symbol;
-        }
-    }
-    result.push_back(current);
-
-    return result;
 }
 
 // Работа с БД
@@ -194,17 +80,16 @@ bool DBConnector::query(const std::string &sql) {
 DBRow DBConnector::insert_row(const std::string &table, const DBRow &setting_row) {
     DBRow result;
     // Если нечего вставлять - на...
-    if (data.empty()) return result;
+    if (setting_row.is_empty()) return result;
     // Для каждой пары в мапе
     std::string columns, values;
-    for (const auto &[col, val] : setting_row.getMap()) {
+    for (const auto &[col, val] : setting_row.get_map()) {
         // Вставляет колонку и значение в общую строку для запроса
         columns += (columns.empty() ? "" : ", ") + col;
-        values += (values.empty() ? "" : ", ") + "'" + shield(val) + "'"; ///
+        values += (values.empty() ? "" : ", ") + std::string("'") + shield(val) + std::string("'"); ///
     }
-    sql += ";";
     // Формирует запрос на вставку
-    std::string sql = "INSERT INTO " + table + " (" + columns + ") VALUES (" + values + ") RETURNING *";
+    std::string sql = "INSERT INTO " + table + " (" + columns + ") VALUES (" + values + ") RETURNING *;";
     // Выполняет этот запросек
     PGresult* res = execute(sql);
     // Выясняет об успехе
@@ -217,7 +102,7 @@ DBRow DBConnector::insert_row(const std::string &table, const DBRow &setting_row
             // Находим название и значение его
             const char* key = PQfname(res, col);
             const char* value = PQgetvalue(res, 0, col);
-            result.set(key, value & &value.size() > 0 ? std::string(value) : "");
+            result.set(key, value ? std::string(value) : "");
         }
     }
     // Очищает результат и возвращает результат
@@ -225,9 +110,7 @@ DBRow DBConnector::insert_row(const std::string &table, const DBRow &setting_row
     return result;
 }
 // Получение строк
-std::vector<DBRow> DBConnector::get_rows(const std::string &table,
-    const std::string &columns, // columns - заголовки колонок через запятую
-    const std::string &where) {
+std::vector<DBRow> DBConnector::get_rows(const std::string &table, const std::string &columns, const std::string &where) {
     // Для результата
     std::vector<DBRow> result;
     // Формируем запрос для нахождения
@@ -249,23 +132,22 @@ std::vector<DBRow> DBConnector::get_rows(const std::string &table,
     int rowsCount = PQntuples(res);
 
     for (int row = 0; row < rowsCount; row++) {
-        result.push_back(Row{});
+        DBRow db_row;
         for (int col = 0; col < columnsCount; col++) {
             const char* key = PQfname(res, col);
             const char* value = PQgetvalue(res, row, col);
-            result[row].set(key, value & &value.size() > 0 ? std::string(value) : "");
+            db_row.set(key, value ? std::string(value) : "");
         }
+        result.push_back(db_row);
     }
 
     PQclear(res);
     return result;
 }
-DBRow DBConnector::get_row(const std::string &table,
-    const std::string &columns, // columns - заголовки колонок через запятую
-    const std::string &where) {
-        std::vector<DBRow> list = get_rows(table, columns, where + " LIMIT 1")
+DBRow DBConnector::get_row(const std::string &table, const std::string &columns, const std::string &where) {
+        std::vector<DBRow> list = get_rows(table, columns, where + " LIMIT 1");
         if (list.empty()) {
-            return Row{};
+            return DBRow{};
         }
     return list[0];
 }
@@ -279,21 +161,21 @@ int DBConnector::update_rows(const std::string &table, const DBRow &values, cons
 
     // Формируем часть SET
     std::string set_part = "";
-    for (const auto &[col, val] : values.getMap()) {
+    for (const auto &[col, val] : values.get_map()) {
         set_part += (set_part == "" ? "" : ", ") + col + " = " + shield(val);
     }
 
     sql += set_part + " WHERE "+ where + ";";
 
     // Выполняем запрос
-    PGresult* res = query(sql.str());
-    bool success = PQresultStatus(res) == PGRES_COMMAND_OK
+    PGresult* res = execute(sql);
+    bool success = PQresultStatus(res) == PGRES_COMMAND_OK;
     
     PQclear(res);
     return success ? 200 : 404;
 }
 
-// 
+// Экранирует значения, чтоб не сломать запрос
 std::string DBConnector::shield(const std::string& value) {
     // Обрабатываем NULL-значения
     if (value.empty()) return "NULL";
@@ -301,29 +183,71 @@ std::string DBConnector::shield(const std::string& value) {
     for (char symbol : value) {
         switch (symbol) {
             case '\'':  // Одиночная кавычка
-                escaped += "\'\'";
+                result += "''";
                 break;
-            /*case '\"':  // Двойная кавычка
-                // Нужна для экранирования массива текста. Т.к. только для него, проводится самостоятельно (в convert_to_string_format) 
-                escaped += "\"\"";
-                break;*/
             case '\\':  // Обратный слеш
-                escaped += "\\\\";
+                result += "\\\\";
                 break;
             case '\n':  // Новая строка
-                escaped += "\\n";
+                result += "\\n";
                 break;
             case '\t':  // Табуляция
-                escaped += "\\t";
+                result += "\\t";
                 break;
             default:
-                // Остальные символы просто добавляем
-                escaped += symbol;
+                result += symbol; // Остальные символы просто добавляем
+            break;
         }
     }
 
-    return escaped;
+    return result;
 }
+
+// Приведение значения к строке, которая будет вставляться в БД (без доп. экранирования, которое необходимо любому значению (',\...))
+std::string DBConnector::convert_to_string_format(const std::string &value) {
+    return value;
+}
+std::string DBConnector::convert_to_string_format(const int &value) {
+    return std::to_string(value);
+}
+std::string DBConnector::convert_to_string_format(const std::vector<int> &value) {
+    std::string result = "{";
+    for (int number : value) {
+        if (result != "{") result += ",";
+        result += std::to_string(number);
+    }
+    result += "}";
+    return result;
+}
+std::string DBConnector::convert_to_string_format(const std::vector<std::vector<int>> &value) {
+    std::string result = "{";
+    for (std::vector<int> numbers : value) {
+        if (result != "{") result += ",";
+        result += convert_to_string_format(numbers);
+    }
+    result += "}";
+    return result;
+}
+std::string DBConnector::convert_to_string_format(const std::vector<std::string> &value) {
+    std::string result = "{";
+    for (std::string line : value) {
+        if (result != "{") result += ",";
+        // Проверка на наличие "
+        size_t pos = 0;
+        while ((pos = line.find('"', pos)) != std::string::npos) {
+            line.replace(pos, 1, "\"\"");
+            pos += 2;  // сдвигаем позицию после замены
+        }
+        // Вставка
+        result += "\"" + line + "\"";
+    }
+    result += "}";
+    return result;
+}
+#endif
+
+
+/*
 
 // JSON аналоги получения
 nlohmann::json DBConnector::get_rows_json(const std::string &table, const std::string &columns = "*", const std::string &where = "") {
@@ -382,46 +306,4 @@ nlohmann::json DBConnector::get_row_json(const std::string &table, const std::st
         return nullptr;
     }
 }
-
-// Приведение значения к строке, которая будет вставляться в БД (без доп. экранирования, которое необходимо любому значению (',\...))
-template<> std::string DBConnector::convert_to_string_format(const std::string &value) {
-    return value;
-}
-template<> std::string DBConnector::convert_to_string_format(const int &value) {
-    return std::to_string(value);
-}
-template<> std::string DBConnector::convert_to_string_format(const std::vector<int> &value) {
-    std::string result = "{";
-    for (int number : value) {
-        if (result != "{") result += ",";
-        result += std::to_string(number);
-    }
-    result += "}"
-    return result;
-}
-template<> std::string DBConnector::convert_to_string_format(const std::vector<std::vector<int>> &value) {
-    std::string result = "{";
-    for (std::vector<int> numbers : value) {
-        if (result != "{") result += ",";
-        result += convert_to_string_format(numbers);
-    }
-    result += "}"
-    return result;
-}
-template<> std::string DBConnector::convert_to_string_format(const std::vector<std::string> &value) {
-    std::string result = "{";
-    for (std::string line : value) {
-        if (result != "{") result += ",";
-        // Проверка на наличие "
-        size_t pos = 0;
-        while ((pos = result.find('"', pos)) != std::string::npos) {
-            result.replace(pos, 1, "\"\"");
-            pos += 2;  // сдвигаем позицию после замены
-        }
-        // Вставка
-        result += "\"" + line + "\"";
-    }
-    result += "}"
-    return result;
-}
-#endif
+*/

@@ -374,8 +374,6 @@ if %errorlevel% neq 0 goto :VCEnd</Command>
     </CustomBuild>
   </ItemGroup>
   <ItemGroup>
-    <None Include="C:\Users\Admin\Desktop\WetvteGitClone\alphavet_latter\TestProcessing\config\test_config.env">
-    </None>
     <ClCompile Include="C:\Users\Admin\Desktop\WetvteGitClone\alphavet_latter\TestProcessing\main.cpp" />
     <ClCompile Include="C:\Users\Admin\Desktop\WetvteGitClone\alphavet_latter\TestProcessing\src\api_server.cpp" />
     <ClCompile Include="C:\Users\Admin\Desktop\WetvteGitClone\alphavet_latter\TestProcessing\src\config_loader.cpp" />
