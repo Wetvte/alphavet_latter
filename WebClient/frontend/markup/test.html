@@ -1,0 +1,98 @@
+<div class="content-panel">
+  <div class="test-container mode-preview" id="testContainer">
+    <!-- Заголовок -->
+    <div class="header test">
+      <h1 id="testTitleText" class="title"></h1>
+      <p id="testDescText" class="subtitle"></p>
+      <div id="testStatusText" class="status"></div>
+      <div class="divider"></div>
+      <div class="navigation-controls">
+        <!-- Кнопка возврата -->
+        <button id="backButton" class="button back">Назад</button>
+        <!-- Кнопка редактирования -->
+        <button id="editInfoButton" class="button edit">Редактировать</button>
+        <button id="changeStatusButton" class="button change status">Деактивировать</button>
+        <button id="deleteTestButton" class="button delete">Удалить</button>
+      </div>
+    </div>
+
+    <!-- Кнопки действий -->
+    <div class="action-buttons smooth-on-load" id="mainActions">
+      <button id="solveTestButton" class="button go">Приступить к прохождению</button>
+      <button id="modifyTestButton" class="button edit">Изменить вопросы теста</button>
+    </div>
+
+    <!-- Контент теста (скрыт по умолчанию) -->
+    <div class="test-content smooth-on-load">
+      <!-- Список вопросов -->
+      <div class="questions-list" id="dataContainer">
+      </div>
+
+      <div class="divider"></div>
+
+      <!-- Кнопки в режиме редактирования -->
+      <div class="modify-actions" id="modifyActions">
+        <button id="cancelTestChangesButton" class="button delete">Отменить изменения</button>
+        <button id="addQuestionButton" class="button add">Добавить вопрос</button>
+        <button id="saveTestButton" class="button go">Сохранить тест</button>
+      </div>
+
+      <!-- Кнопки в режиме прохождения -->
+      <div class="solve-actions" id="solveActions">
+        <button id="finishTestButton" class="button go">Сохранить и закончить тест</button>
+      </div>
+    </div>
+
+    <div class="divider"></div>
+    
+    <!-- Раздел попыток -->
+    <div class="section tries smooth-on-load">
+      <h2 class="section-title">Попытки</h2>
+      <p class="section-describtion">
+        Список попыток прохождения теста.
+      </p>
+
+      <!-- Кнопка для открытия/закрытия списка -->
+      <button id="toggleTriesButton" class="button toggle">Показать попытки</button>
+
+      <div id="triesList" class="section-container tries">
+      </div>
+    </div>
+
+    <!-- Модальное окно добавления вопроса по ID -->
+    <div class="modal-overlay" id="modalOverlay">
+      <div class="modal-content" id="modalContent">
+        <div class="modal-title" id="modalTitle">Редактирование теста</div>
+
+        <!-- Поля для редактирования дисциплины (режим "edit") -->
+        <div class="modal-test-fields">
+          <div class="modal-form-group">
+            <label for="disciplineName" class="modal-form-title">Название дисциплины</label>
+            <input type="text" id="disciplineTitleInput" class="modal-form-input" placeholder="Новое дисциплины">
+          </div>
+          <div class="modal-form-group">
+            <label for="disciplineDesc" class="modal-form-title">Описание дисциплины</label>
+            <textarea id="disciplineDescInput" rows="4" class="modal-form-input"
+              placeholder="Новое описание..."></textarea>
+          </div>
+        </div>
+
+        <!-- Поля для добавления вопроса (режим "question") -->
+        <div class="modal-question-fields">
+          <div class="modal-form-group">
+            <h3 class="modal-form-title">Айди и Версия вопроса (через точку)</h3>
+            <input id="questionIdInput" type="text" class="modal-form-input"
+              placeholder="Введите Id или Id.Version вопроса">
+          </div>
+        </div>
+
+        <!-- Кнопки -->
+        <div class="modal-buttons">
+          <button id="modalCloseButton" class="button back">Отмена</button>
+          <button id="modalSaveInfoButton" class="button go">Сохранить</button>
+          <button id="modalAddnewQuestionButton" class="button add">Создать новый</button>
+          <button id="modalAddQuestionButton" class="button go">Добавить</button>
+        </div>
+      </div>
+    </div>
+  </div>

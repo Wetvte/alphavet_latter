@@ -1,0 +1,34 @@
+.header.primary {
+  background: linear-gradient(135deg, #ea667c 0%, #b52c3a 100%);
+}
+
+/* Раздел "Пользователи" */
+.section-text.user-name {
+  flex: 1;
+}
+
+/* Вопросы */
+.section-text.question-signature {
+  flex: 1;
+  font-size: 20px;
+}
+
+.section-text.question-title {
+  flex: 3;
+}
+
+.section-text.question-status {
+  flex: 2;
+}
+
+.question-status.deleted {
+  color: #db0606;
+}
+
+.question-status.deactivated {
+  color: #db7006;
+}
+
+.question-status.activated {
+  color: #46ea2d;
+}

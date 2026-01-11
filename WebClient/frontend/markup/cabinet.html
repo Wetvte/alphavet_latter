@@ -1,0 +1,118 @@
+<div class="content-panel">
+  <!-- Заголовок -->
+  <div class="header cabinet">
+    <h1 id="idText" class="title"></h1>
+    <p class="subtitle">Управляйте данными и учебным процессом</p>
+    <div class="navigation-controls">
+      <button id="backButton" class="button back">Назад</button>
+      <button id="primaryButton" class="button primary">
+        <span class="primary-icon">🏠</span>
+        На главную
+      </button>
+    </div>
+  </div>
+
+  <!-- Новости -->
+  <div class="news-buttons-container smooth-on-load">
+    <button id="newsButton" class="button news">
+      <span class="news-icon">📰</span>
+      Новостные сообщения
+      <span id="newsBadge" class="news-badge"></span>
+    </button>
+  </div>
+  <div id="newsDropdown" class="news-dropdown">
+  </div>
+
+  <!-- Данные пользователя -->
+  <div class="user-info-container smooth-on-load">
+    <div class="user-info-row">
+      <span class="user-label">Почта:</span>
+      <span id="emailText" class="user-info-value">-</span>
+    </div>
+    <div class="user-info-row">
+      <span class="user-label">Никнейм:</span>
+      <span id="nicknameText" class="user-info-value">-</span>
+      <button id="changeNicknameButton" class="button edit" data-field="nickname">Изменить</button>
+    </div>
+    <div class="user-info-row">
+      <span class="user-label">ФИО:</span>
+      <span id="fullnameText" class="user-info-value">-</span>
+      <button id="changeFullnameButton" class="button edit" data-field="fullname">Изменить</button>
+    </div>
+    <div class="user-info-row">
+      <span class="user-label">Роль:</span>
+      <span id="rolesText" class="user-info-value">-</span>
+      <button id="changeRolesButton" class="button edit" data-field="roles">Изменить</button>
+    </div>
+    <div class="user-info-row">
+      <span class="user-label">Статус:</span>
+      <span id="statusText" class="user-info-value">-</span>
+      <button id="blockButton" class="button block">Заблокировать</button>
+    </div>
+  </div>
+
+  <!-- Кнопки выхода и удаления -->
+  <div class="logout-buttons-container smooth-on-load">
+    <button id="logoutButton" class="button logout">Выход</button>
+    <button id="logoutAllButton" class="button logout-all">Выход со всех устройств</button>
+    <button id="deleteAccountButton" class="button delete-account">Удалить аккаунт</button>
+  </div>
+
+  <!-- Секция дисциплин -->
+  <div class="section smooth-on-load">
+    <h2 class="section-title">Дисциплины</h2>
+    <p class="section-describtion">
+      Здесь вы можете просматривать список дисциплин, получать доступ к учебным материалам,
+      следить за текущими заданиями и связываться с преподавателями.
+    </p>
+
+    <button id="toggleDisciplinesButton" class="button toggle">
+      Показать дисциплины
+    </button>
+
+    <div id="disciplinesList" class="section-container disciplines">
+    </div>
+  </div>
+
+  <!-- Секция тестов -->
+  <div class="section tests smooth-on-load">
+    <h2 class="section-title">Тесты</h2>
+    <p class="section-describtion">
+      Список доступных и пройденных тестов. Вы можете начать новый тест, продолжить незавершённый
+      или просмотреть результаты уже выполненных.
+    </p>
+    <button id="toggleTestsButton" class="button toggle">
+      Показать дисциплины
+    </button>
+    <div id="testsContainer" class="section-container tests">
+    </div>
+  </div>
+  
+  <!-- Секция оценок -->
+  <div class="section smooth-on-load">
+    <h2 class="section-title">Оценки</h2>
+    <p class="section-describtion">
+      Просмотр текущих оценок по дисциплинам. Вы можете увидеть детализацию по каждому заданию
+      и отследить динамику успеваемости.
+    </p>
+    <button id="toggleGradesButton" class="button toggle">
+      Показать оценки
+    </button>
+    <div id="gradesContainer" class="section-container grades">
+    </div>
+  </div>
+
+  <!-- Модальное окно редактирования -->
+  <div class="modal-overlay" id="modalOverlay">
+    <div class="modal-content">
+      <h3 class="modal-title" id="modalTitle"></h3>
+      <div class="modal-form-group">
+        <input type="text" id="modalInput" class="modal-form-input">
+      </div>
+      <div class="modal-buttons">
+        <button class="button back" id="modalCancelButton">Отмена</button>
+        <button class="button go" id="modalSaveButton">Сохранить</button>
+      </div>
+    </div>
+  </div>
+</div>

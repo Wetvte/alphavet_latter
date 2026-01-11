@@ -1,0 +1,62 @@
+.header.discipline {
+  background: linear-gradient(to right, #a1e5f6, #678f9e);
+  color: #021f26;
+}
+
+/* Скрытие разделов модального окна по режиму */
+.mode-edit .modal-teacher-fields,
+.mode-edit .modal-test-fields,
+.mode-edit .modal-student-fields,
+
+.mode-add-teacher .modal-discipline-fields,
+.mode-add-teacher .modal-test-fields,
+.mode-add-teacher .modal-student-fields,
+
+.mode-add-test .modal-teacher-fields,
+.mode-add-test .modal-discipline-fields,
+.mode-add-test .modal-student-fields,
+
+.mode-add-student .modal-discipline-fields,
+.mode-add-student .modal-test-fields,
+.mode-add-student .modal-teacher-fields {
+  display: none !important;
+}
+
+/* Скрытие кнопок действий модального окна по режиму*/
+.mode-edit #modalAddTeacherButton,
+.mode-edit #modalAddTestButton,
+.mode-edit #modalAddnewTestButton,
+
+.mode-add-teacher #modalDsiciplineChangesSaveButton,
+.mode-add-teacher #modalAddTestButton,
+.mode-add-teacher #modalAddnewTestButton,
+
+.mode-add-test #modalAddTeacherButton,
+.mode-add-test #modalDsiciplineChangesSaveButton {
+  display: none !important;
+}
+
+.status-indicator {
+  padding: 7px, 10px;
+  margin-right: 2px;
+  font-size: 17px;
+  font-weight: 600;
+  align-items: center;
+}
+
+.status-indicator.activated {
+  color: #27ae60;
+}
+
+.status-indicator.deactivated {
+  color: #ed5604;
+}
+
+.status-indicator.deleted {
+  color: #b11506;
+}
+
+.test-actions {
+  display: flex;
+  gap: 8px;
+}

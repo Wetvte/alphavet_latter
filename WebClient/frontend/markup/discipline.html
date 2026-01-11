@@ -1,0 +1,108 @@
+<div class="content-panel">
+  <!-- Заголовок -->
+  <div class="header discipline smooth-on-load">
+    <h1 id="disciplineTitleText" class="title"></h1>
+    <p id="disciplineDescText" class="subtitle"></p>
+    <div class="navigation-controls">
+      <!-- Кнопка возврата -->
+      <button id="backButton" class="button back">Назад</button>
+      <!-- Кнопка редактирования -->
+      <button id="editInfoButton" class="button edit">Редактировать</button>
+      <!-- Добавление студента -->
+      <button id="subscribeButton" class="button add">Записаться</button>
+    </div>
+  </div>
+
+  <!-- Раздел преподавателей -->
+  <div class="section teachers smooth-on-load">
+    <h2 class="section-title">Преподаватели дисциплины</h2>
+    <p class="section-describtion">
+      Ниже представлен список преподавателей дисциплины.
+    </p>
+    <button class="button toggle" id="toggleTeachersButton">Показать преподавателей</button>
+
+    <div id="teachersList" class="section-container teachers">
+    </div>
+  </div>
+
+  <!-- Раздел тестов -->
+  <div class="section tests smooth-on-load">
+    <h2 class="section-title">Тесты по дисциплине</h2>
+    <p class="section-describtion">
+      Ниже представлен список доступных тестов.
+    </p>
+
+    <button class="button toggle" id="toggleTestsButton">Показать тесты</button>
+
+    <div id="testsList" class="section-container tests">
+    </div>
+  </div>
+
+  <!-- Раздел студентов -->
+  <div class="section students smooth-on-load">
+    <h2 class="section-title">Студенты</h2>
+    <p class="section-describtion">
+      Список студентов, зачисленных на дисциплину. Для отчисления выберите соответствующую кнопку.
+    </p>
+
+    <!-- Кнопка для открытия/закрытия списка -->
+    <button id="toggleStudentsButton" class="button toggle">Показать студентов</button>
+
+    <div id="studentsList" class="section-container students">
+    </div>
+  </div>
+
+  <!-- Модальное окно (универсальное) -->
+  <div class="modal-overlay" id="modalOverlay">
+    <div class="modal-content" id="modalContent">
+      <h3 class="modal-title" id="modalTitle">Редактирование дисциплины</h3>
+
+      <!-- Поля для редактирования дисциплины (режим "edit") -->
+      <div class="modal-discipline-fields">
+        <div class="modal-form-group">
+          <label for="disciplineName" class="modal-form-title">Название дисциплины</label>
+          <input type="text" id="disciplineTitleInput" class="modal-form-input" placeholder="Новое название">
+        </div>
+        <div class="modal-form-group">
+          <label for="disciplineDesc" class="modal-form-title">Описание дисциплины</label>
+          <textarea id="disciplineDescInput" rows="4" class="modal-form-input"
+            placeholder="Новое описание..."></textarea>
+        </div>
+      </div>
+
+      <!-- Поля для добавления преподавателя (режим "add-teacher") -->
+      <div class="modal-teacher-fields">
+        <div class="modal-form-group">
+          <label for="teacherName" class="modal-form-title">Айди преподавателя</label>
+          <input type="text" id="teacherIdInput" class="modal-form-input" placeholder="Введите имя или айди">
+        </div>
+      </div>
+
+      <!-- Поля для добавления тестирования (режим "add-test") -->
+      <div class="modal-test-fields">
+        <div class="modal-form-group">
+          <label for="testName" class="modal-form-title">Название/айди теста</label>
+          <input id="testInput" class="modal-form-input"
+            placeholder="Введите название для нового или айди для существующего">
+        </div>
+      </div>
+
+      <!-- Поля для добавления студента (режим "add-student") -->
+      <div class="modal-student-fields">
+        <div class="modal-form-group">
+          <label for="studentName" class="modal-form-title">Имя или айди студента</label>
+          <input type="text" id="studentIdInput" class="modal-form-input" placeholder="Введите имя или айди">
+        </div>
+      </div>
+
+      <!-- Кнопки -->
+      <div class="modal-buttons">
+        <button class="button back" id="modalCancelButton">Отмена</button>
+        <button class="button go" id="modalDsiciplineChangesSaveButton">Сохранить</button>
+        <button class="button add" id="modalAddTeacherButton">Добавить</button>
+        <button class="button add" id="modalAddTestButton">Добавить</button>
+        <button class="button go" id="modalAddnewTestButton">Создать новый</button>
+      </div>
+    </div>
+  </div>
+</div>

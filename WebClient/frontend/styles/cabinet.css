@@ -1,0 +1,172 @@
+/* Заголовок */
+.header.cabinet {
+  background: linear-gradient(to right, #fea64f, #fe6600);
+}
+
+/* Новости */
+.news-buttons-container {
+  position: relative;
+  padding: 20px 40px;
+  display: flex;
+  justify-content: center;
+  flex-wrap: wrap;
+}
+
+.button.news {
+  background: linear-gradient(45deg, #2980b9, #6bb9f0);
+  color: white;
+  position: relative;
+  padding: 14px 22px 14px 32px;
+}
+
+.news-icon {
+  font-size: 18px;
+  margin-right: 8px;
+}
+
+.news-badge {
+  position: absolute;
+  top: 6px;
+  right: 8px;
+  background-color: #e74c3c;
+  color: white;
+  border-radius: 50%;
+  width: 22px;
+  height: 22px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 12px;
+  font-weight: bold;
+  line-height: 1;
+}
+
+.news-dropdown {
+  position: absolute;
+  margin-right: 25px;
+  right: 0;
+  background: white;
+  border-radius: 12px;
+  box-shadow: 0 15px 40px rgba(0, 0, 0, 0.2);
+  width: 360px;
+  height: 400px;
+  overflow-y: auto;
+  z-index: 2500;
+  padding: 15px 0;
+  display: none;
+}
+
+.news-item {
+  padding: 12px 20px;
+  border-bottom: 1px solid #eee;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.news-sender {
+  font-weight: 600;
+  color: #2c3e50;
+  font-size: 14px;
+}
+
+.news-content {
+  color: #666;
+  font-size: 14px;
+  line-height: 1.4;
+}
+
+.news-delete {
+  align-self: flex-start;
+  background: #e74c3c;
+  color: white;
+  border: none;
+  border-radius: 4px;
+  padding: 4px 8px;
+  font-size: 12px;
+  cursor: pointer;
+  margin-top: 4px;
+}
+
+.news-delete:hover {
+  background: #c0392b;
+}
+
+/* Данные пользователя */
+.user-info-container {
+  padding: 0 50px 35px;
+}
+
+.user-info-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 22px;
+  padding: 0 10px;
+}
+
+.user-label {
+  font-weight: 600;
+  color: #555;
+  min-width: 120px;
+  font-size: 16px;
+}
+
+.user-info-value {
+  color: #333;
+  font-size: 17px;
+  flex-grow: 1;
+  padding-left: 15px;
+}
+
+.button.block {
+  background: linear-gradient(45deg, #ff6b2c, #d14545);
+  color: #ffe2eb;
+}
+
+.button.unblock {
+  background: linear-gradient(45deg, #02f43e, #2b7a06);
+  color: #bcf38c;
+}
+
+/* Кнопки выхода и удаления */
+.logout-buttons-container {
+  padding: 0 50px 40px;
+  display: flex;
+  gap: 18px;
+  justify-content: center;
+  flex-wrap: wrap;
+}
+
+.button.logout {
+  background: linear-gradient(45deg, #4e54c8, #8f94fb);
+}
+
+.button.logout-all {
+  background: linear-gradient(45deg, #ff6b6b, #ff8e8e);
+}
+
+.button.delete-account {
+  background: linear-gradient(45deg, #a83279, #c73e6a);
+}
+
+/* Статус */
+.status-online {
+  color: #006d2a;
+}
+
+.status-offline {
+  color: #3f311a;
+}
+
+.status-blocked {
+  color: #d02020;
+}
+
+.status-completed {
+  color: #1d2a22;
+}
+
+.status-in-progress {
+  color: #f39c12;
+}

@@ -1,0 +1,39 @@
+.navigation-controls {
+  margin-top: 15px;
+  font-size: 20px;
+  font-weight: 600;
+}
+
+.button.cabinet {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  margin-top: 14px;
+  background: linear-gradient(to right, #fea64f, #fe6600);
+  color: white;
+  text-decoration: none;
+  overflow: hidden;
+  position: relative;
+}
+.cabinet-icon {
+  font-size: 20px;
+  line-height: 1;
+}
+
+.button.primary {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  margin-top: 14px;
+  background: linear-gradient(135deg, #ea667c 0%, #b52c3a 100%);
+  color: white;
+  text-decoration: none;
+  overflow: hidden;
+  position: relative;
+}
+.primary-icon {
+  font-size: 20px;
+  line-height: 1;
+}

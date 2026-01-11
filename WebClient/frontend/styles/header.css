@@ -1,0 +1,25 @@
+.header {
+  padding: 40px 50px 30px;
+  text-align: center;
+  color: white;
+}
+
+h1 {
+  font-size: 32px;
+  font-weight: 700;
+  letter-spacing: 0.5px;
+}
+
+.subtitle {
+  font-size: 16px;
+  opacity: 0.9;
+  max-width: 600px;
+  margin: 15px auto;
+}
+
+.divider {
+  height: 1px;
+  background: linear-gradient(to right, transparent, rgba(93, 93, 93, 0.3), transparent);
+  margin: 10px auto;
+  max-width: 80%;
+}

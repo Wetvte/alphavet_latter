@@ -1,0 +1,384 @@
+.header.test {
+    background: linear-gradient(to right, #9eeb8d, #7aa63c);
+    color: #0d2602;
+}
+
+/* Скрытие кнопок в зависимости от режима показа теста */
+.test-container.mode-preview #modifyActions,
+.test-container.mode-preview #solveActions,
+
+.test-container.mode-modify #mainActions,
+.test-container.mode-modify #solveActions,
+
+.test-container.mode-solve #modifyActions,
+.test-container.mode-solve #mainActions,
+
+.test-container.mode-observing #modifyActions,
+.test-container.mode-observing #solveActions,
+.test-container.mode-observing #mainActions,
+.test-container.mode-observing #editInfoButton,
+.test-container.mode-observing #changeStatusButton,
+.test-container.mode-observing #deleteTestButton {
+    display: none !important;
+}
+
+/* Скрытие ненужных меню в модалке */
+.modal-content.mode-edit .modal-question-fields,
+.modal-content.mode-edit #modalAddnewQuestionButton,
+.modal-content.mode-edit #modalAddQuestionButton,
+
+.modal-content.mode-question .modal-test-fields,
+.modal-content.mode-question #modalSaveInfoButton {
+    display: none !important;
+}
+
+input:focus,
+textarea:focus {
+    outline: none;
+    border-color: #4461d9;
+    transform: scale(1.01);
+    box-shadow: 0 0 0 6px rgba(68, 97, 217, 0.15);
+}
+
+/* Информация о тесте */
+.status {
+    padding: 6px 12px;
+    border-radius: 6px;
+    font-weight: 600;
+    display: inline-block;
+}
+
+.status.activated {
+    background-color: #27ae60;
+    color: white;
+}
+
+.status.deactivated {
+    background-color: #704f06;
+    color: white;
+}
+
+.status.deleted {
+    background-color: #780a00;
+    color: white;
+}
+
+/* Кнопки управления и действий */
+.manage-buttons,
+.modify-actions,
+.action-buttons,
+.solve-actions {
+    display: flex;
+    gap: 15px;
+    justify-content: center;
+    margin: 30px 0;
+}
+
+/* Контент теста */
+.test-content {
+    background-color: white;
+    border-radius: 12px;
+    box-shadow: 0 10px 30px rgba(0, 0, 0, 0.1);
+    padding: 30px;
+}
+
+/* Общие стили для блоков */
+.question-item,
+.answer-item {
+    border: 2px solid #e0e0e0;
+    border-radius: 12px;
+    padding: 20px;
+    margin-bottom: 24px;
+    background-color: #ffffff;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.05);
+}
+
+/* Общие стили вопросов */
+.question-item {
+    position: relative;
+    transition: transform 0.2s ease, box-shadow 0.2s ease;
+}
+
+.question-item:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 8px 20px rgba(0, 0, 0, 0.1);
+}
+
+.question-options {
+    margin-bottom: 16px;
+}
+
+.question-option-item {
+    display: flex;
+    gap: 12px;
+    margin-bottom: 12px;
+    align-items: flex-start;
+}
+
+/* Стили для режима редактирования (modify) */
+.question-modify-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 16px;
+}
+
+.question-modify-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 16px;
+}
+
+.question-modify-number {
+    margin-right: 10px;
+    font-size: 18px;
+    font-weight: 700;
+    color: #102f44;
+    margin-bottom: 8px;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+}
+
+.question-modify-input.title {
+    flex-grow: 1;
+    font-size: 14px;
+    font-weight: 600;
+    color: #2c3e50;
+    padding: 10px 15px;
+    border: 2px solid #3498db;
+    border-radius: 8px;
+    outline: none;
+    transition: border-color 0.3s ease;
+}
+
+.question-modify-input.title:focus {
+    border-color: #2980b9;
+}
+
+.question-modify-controls {
+    display: flex;
+    gap: 8px;
+    margin-left: 12px;
+}
+
+.button.move-up,
+.button.move-down {
+    width: 36px;
+    height: 36px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background-color: #ecf0f1;
+    border: none;
+    cursor: pointer;
+    font-size: 14px;
+    color: #7f8c8d;
+}
+
+.button.question.delete {
+    padding: 8px;
+}
+
+.question-modify-input.variants-count {
+    width: 105px;
+    padding: 10px 15px;
+    margin-left: 15px;
+    text-align: center;
+    border: 1px solid #ddd;
+    border-radius: 8px;
+    font-size: 14px;
+    outline: none;
+    transition: border-color 0.3s ease;
+}
+
+.question-modify-input.option-text {
+    flex-grow: 1;
+    min-height: 60px;
+    padding: 12px 16px;
+    border: 1px solid #ddd;
+    border-radius: 8px;
+    font-size: 15px;
+    resize: vertical;
+    outline: none;
+    transition: border-color 0.3s ease;
+}
+
+.question-modify-input.option-text:focus {
+    border-color: #3498db;
+}
+
+.question-modify-input.option-points {
+    width: 80px;
+    padding: 10px 12px;
+    text-align: center;
+    border: 1px solid #ddd;
+    border-radius: 8px;
+    font-size: 15px;
+    outline: none;
+    transition: border-color 0.3s ease;
+}
+
+.question-modify-input.option-points:focus {
+    border-color: #3498db;
+}
+
+.button.question-modify-add-option {
+    background-color: #2ecc71;
+    color: white;
+}
+
+/* Стили для режима прохождения (solve) */
+.question-solve-number {
+    font-size: 16px;
+    font-weight: 700;
+    color: #3498db;
+    margin-bottom: 8px;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+}
+
+.question-solve-title {
+    font-size: 18px;
+    font-weight: 600;
+    color: #2c3e50;
+    margin-bottom: 20px;
+    line-height: 1.5;
+}
+
+.question-option-item.solve {
+    padding: 12px 16px;
+    border: 2px solid transparent;
+    border-radius: 8px;
+    cursor: pointer;
+    transition: background-color 0.3s ease, border-color 0.3s ease;
+}
+
+.question-option-item.solve:hover {
+    background-color: #f8f9fa;
+    border-color: #3498db;
+}
+
+.question-solve-option-selecter {
+    margin-right: 12px;
+    width: 18px;
+    height: 18px;
+    accent-color: #3498db;
+    /* Цвет радио-кнопки */
+}
+
+.question-solve-option-text {
+    font-size: 16px;
+    color: #333;
+    line-height: 1.4;
+}
+
+
+/* Ответы */
+.answer-item {
+    position: relative;
+    transition: transform 0.2s ease, box-shadow 0.2s ease;
+}
+
+.answer-header {
+    margin-bottom: 16px;
+}
+
+.answer-number {
+    font-size: 16px;
+    font-weight: 700;
+    color: #3498db;
+    margin-bottom: 8px;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+}
+
+.answer-title {
+    font-size: 18px;
+    font-weight: 600;
+    color: #2c3e50;
+    line-height: 1.5;
+}
+
+.answer-options {
+    margin-top: 16px;
+}
+
+.answer-option {
+    display: flex;
+    align-items: center;
+    padding: 12px 15px;
+    border-radius: 8px;
+    transition: background-color 0.3s ease, border-color 0.3s ease;
+    margin-bottom: 8px;
+    background-color: #ebebec;
+    border: 2px solid #cfcfcf;
+}
+
+.answer-option.selected {
+    background-color: #d2d3d4;
+    border: 2px solid #a6baa5;
+}
+
+.answer-option:hover {
+    border-color: #3498db;
+}
+
+.answer-option-text {
+    font-size: 16px;
+    color: #333;
+    line-height: 1.4;
+    flex-grow: 1;
+}
+
+.answer-score-container {
+    margin-top: 20px;
+    padding: 10px;
+    background-color: #f8f9fa;
+    border-radius: 10px;
+    border: 2px solid #eaecef;
+    text-align: right;
+}
+
+.answer-option-indicator {
+    width: 16px;
+    height: 16px;
+    border-radius: 50%;
+    margin-right: 10px;
+    display: inline-block;
+    background-color: #494949;
+    /* Серый для не выбранного */
+    border: 1px solid #292929;
+}
+
+.answer-option.selected .answer-option-indicator {
+    background-color: #27ae60;
+    /* Зелёный для выбранного */
+}
+
+.answer-score {
+    font-size: 16px;
+    font-weight: 600;
+    display: inline-block;
+    padding: 5px 10px;
+    border-radius: 5px;
+    color: #202020;
+}
+
+.answer-score.fail {
+    color: #e74c3c;
+    background-color: rgba(231, 76, 60, 0.1);
+    border: 1px solid #c33e2f;
+}
+
+.answer-score.medium {
+    color: #f39c12;
+    background-color: rgba(243, 156, 18, 0.1);
+    border: 1px solid #cf840b;
+}
+
+.answer-score.success {
+    color: #27ae60;
+    background-color: rgba(39, 174, 96, 0.1);
+    border: 1px solid #1d8c4b;
+}

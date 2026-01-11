@@ -1,0 +1,95 @@
+<!-- Экран загрузки -->
+<div id="loaderContainer" class="loader-container hidden">
+  <div class="loader"></div>
+  <div class="loader-text">Обработка...</div>
+</div>
+
+<!-- Окно подтверждения -->
+<div id="confirmContainer" class="confirm-container hidden">
+  <p id="confirmText" class="confirm-text">Вы уверены, что хотите продолжить?</p>
+  <div class="confirm-buttons">
+    <button id="confirmYes" class="confirm-button yes">Да</button>
+    <button id="confirmNo" class="confirm-button no">Нет</button>
+  </div>
+</div>
+
+<!-- Весь контейнер входа -->
+<div id="loginContainer" class="login-container">
+  <!-- Табы Вход / Регистрация (теперь по центру) -->
+  <div class="tabs">
+    <div class="tab authorization" id="tabAuth">Вход</div>
+    <div class="tab registration" id="tabRegistration">Регистрация</div>
+  </div>
+
+  <!-- Формы входа -->
+  <form id="inputsFormsContainer" class="inputs-forms-container">
+    <div id="emailForm" class="form-group email">
+      <label for="email">Почта</label>
+      <input type="text" id="emailInput" name="email" value="Wetvte@yandex.ru" required>
+    </div>
+    <div id="nicknameForm" class="form-group nickname">
+      <label for="name">Никнейм</label>
+      <input type="text" id="nicknameInput" name="name" value="Wetvtik" required>
+    </div>
+    <div id="firstnameForm" class="form-group firstname">
+      <label for="name">Имя</label>
+      <input type="text" id="firstnameInput" name="name" value="Глеббикс" required>
+    </div>
+    <div id="lastnameForm" class="form-group lastname">
+      <label for="name">Фамилия</label>
+      <input type="text" id="lastnameInput" name="name" value="Сига" required>
+    </div>
+    <div id="patronimycForm" class="form-group patronimyc">
+      <label for="name">Отчество</label>
+      <input type="text" id="patronimycInput" name="name" value="Андре" required>
+    </div>
+    <div id="passwordForm" class="form-group password">
+      <label for="password">Пароль</label>
+      <input type="password" id="passwordInput" name="password" value="Wetik1" required>
+    </div>
+    <div id="repeatPasswordForm" class="form-group repeat-password">
+      <label for="repeatPassword">Повтор пароля</label>
+      <input type="password" id="repeatPasswordInput" name="repeatPassword" value="Wetik1" required>
+    </div>
+  </form>
+
+  <!-- Блок для ввода шестизначного кода подтверждения -->
+  <div class="verification-group" id="codeVerification">
+    <label for="code">Код подтверждения</label>
+    <div class="code-input-container">
+      <input type="text" class="code-input" maxlength="1" required>
+      <input type="text" class="code-input" maxlength="1" required>
+      <input type="text" class="code-input" maxlength="1" required>
+      <input type="text" class="code-input" maxlength="1" required>
+      <input type="text" class="code-input" maxlength="1" required>
+      <input type="text" class="code-input" maxlength="1" required>
+    </div>
+  </div>
+
+  <!-- Блок уведомления о результате -->
+  <div id="notification" class="notification error hidden">
+    <div id="notificationContent">Неверный логин или пароль</div>
+    <button id="closeNotification" class="close-button">x</button>
+  </div>
+
+  <button type="submit" id="entryButtonRegistration" class="entry-button registration">Зарегистрироваться</button>
+  <button type="submit" id="entryButtonAuthorizationDefault" class="entry-button authorization default">Войти</button>
+  <button type="submit" id="entryButtonAuthorizationCode" class="entry-button authorization code">Войти</button>
+  <button type="submit" id="entryButtonVerifingRegistration" class="entry-button verifing registration">Отправить
+    код</button>
+  <button type="submit" id="entryButtonVerifingAuthorization" class="entry-button verifing authorization code">Отправить
+    код</button>
+
+  <button type="submit" id="typeButtonAuthorizationCode" class="type-button authorization code">Войти по коду</button>
+  <button type="submit" id="typeButtonAuthorizationDefault" class="type-button authorization default">Войти по
+    паролю</button>
+
+
+  <div id="authServicesContainer" class="auth-services-container">
+    <div class="autho-service">
+      <button id="githubAuth" class="github-button">Войти через GitHub</button>
+    </div>
+    <div class="autho-service">
+      <button id="yandexAuth" class="yandex-button">Войти через Яндекс</button>
+    </div>
+  </div>

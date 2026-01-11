@@ -1,0 +1,46 @@
+/* Уведомления */
+.notification {
+  position: fixed;
+  right: -350px;
+  bottom: 30px;
+  width: 320px;
+  padding: 20px 25px;
+  border-radius: 12px;
+  font-weight: 600;
+  line-height: 1.4;
+  box-shadow: 0 15px 40px rgba(0, 0, 0, 0.2);
+  transition: right 0.6s cubic-bezier(0.4, 0, 0.2, 1);
+  z-index: 3000;
+  display: flex;
+  align-items: center;
+  gap: 15px;
+  border-left: 5px solid transparent;
+
+  color: rgb(82, 47, 9);
+  background: linear-gradient(45deg, #ae9a27, #bc8e1a);
+  border-left-color: #ab7009;
+}
+
+.notification.error {
+  color: rgb(255, 194, 194);
+  background: linear-gradient(45deg, #e74c3c, #c0392b);
+  border-left-color: #d32323;
+}
+
+.notification.success {
+  color: rgb(168, 255, 159);
+  background: linear-gradient(45deg, #27ae60, #1abc9c);
+  border-left-color: #09ab1c;
+}
+
+.notification.show {
+  right: 10px;
+}
+
+.notification-icon {
+  font-size: 27px;
+}
+
+.notification-message {
+  flex: 1;
+}

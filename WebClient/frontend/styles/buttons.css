@@ -1,0 +1,64 @@
+.button {
+  padding: 10px 15px;
+  border: none;
+  border-radius: 10px;
+  cursor: pointer;
+  font-size: 16px;
+  font-weight: 600;
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+  overflow: visible;
+  color: rgb(228, 225, 225);
+}
+
+.button:hover {
+  transform: scale(1.025);
+  transform: translateY(-2px);
+  box-shadow: 0 10px 20px rgba(0, 0, 0, 0.2);
+}
+
+.button:active {
+  transform: translateY(0);
+}
+
+.button.toggle {
+  background: #eef2ff;
+  color: #4461d9;
+  border: 2px solid #4461d9;
+}
+
+.button.back {
+  background: linear-gradient(45deg, #515050, #46494f);
+  color: rgb(218, 215, 215);
+}
+
+.button.add {
+  color: rgb(252, 241, 247);
+  background: linear-gradient(45deg, #f402ab, #910e45);
+}
+
+.button.delete {
+  background: linear-gradient(45deg, #f40202, #d71616);
+  color: #fae6e6;
+}
+
+.button.edit {
+  padding: 10px 20px;
+  background: linear-gradient(45deg, #276aae, #08688b);
+  color: white;
+}
+
+.button.change {
+  padding: 10px 20px;
+  background: linear-gradient(45deg, #aea327, #ea9438);
+  color: rgb(254, 255, 171);
+}
+
+/* Кнопки для соглашения, перехода куда-то */
+.button.go {
+  padding: 10px 20px;
+  background: linear-gradient(45deg, #27ae60, #2ecc71);
+  color: white;
+}

@@ -1,0 +1,13 @@
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+body {
+  font-family: 'Segoe UI', Arial, sans-serif;
+  background: linear-gradient(0deg, #1f9fc9 0%, #7c4172 100%);
+  background-size: 200% 200%;
+  min-height: 100vh;
+  line-height: 1.5;
+}
