@@ -3,5 +3,5 @@ package main
 // Мэин
 func main() {
 	LoadEnv()
-	LaunchServer()
+	LaunchServer() // Автоматически Connect to Dababase
 }

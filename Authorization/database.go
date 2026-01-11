@@ -6,9 +6,6 @@ import (
 	"log"
 	"os"
 
-	"math/rand"
-	"time"
-
 	"go.mongodb.org/mongo-driver/bson"
 	"go.mongodb.org/mongo-driver/bson/primitive"
 	"go.mongodb.org/mongo-driver/mongo"
@@ -67,69 +64,96 @@ func InsertUserToDatabase(data *primitive.M) (*primitive.M, error) {
 	log.Println("Добавление пользователя: 10%.")
 
 	// Проверка наличия почты
-	email, hasEmail := (*data)["email"].(string)
-	if !hasEmail || email == "Not linked" {
+	email, has_old_data := (*data)["email"].(string)
+	if !has_old_data || email == "Not linked" {
 		return nil, fmt.Errorf("Не получилось создать пользователя, так как не получена почта.")
 	}
 
 	// Пробиваем по емэйл
-	userWithSameEmail, emailSearchErr := GetFromDatabaseByValue("Users", "email", email)
+	old_data, old_data_search_err := GetFromDatabaseByValue("Users", "email", email)
 
 	log.Println("Добавление пользователя: 25%.")
-	if emailSearchErr != nil {
+	if old_data_search_err != nil {
 		// Если это 100% новая запись для такого пользователя
 		log.Println("Добавление пользователя: 55%.")
 		// Если присвоен пользователю айди заранее
 		if id, ok := (*data)["id"]; ok && len(id.(string)) > 0 {
 			// Проверяет на занятость и, если нужно, присваивает новый
 			_, err := GetFromDatabaseByValue("Users", "id", id.(string))
-			if err != nil {
-				(*data)["id"] = GenerateUniqueID()
+			if err == nil {
+				(*data)["id"] = GenerateID()
 			}
-		} else { // Если не присвоем заранее, присваиваем
-			(*data)["id"] = GenerateUniqueID()
+		} else {
+			(*data)["id"] = GenerateID()
+		}
+		// Пока генерируется уже существующий айди, регенерируем
+		for true {
+			_, err := GetFromDatabaseByValue("Users", "id", (*data)["id"].(string))
+			if err == nil {
+				(*data)["id"] = GenerateID()
+			} else {
+				break
+			}
 		}
 		// Инициализирует неназначенные изначальные данные // ini
-		roles := []string{"Student"}
+		roles := primitive.A{"Student"}
 		permissions := GenerateBasePermissionsListForRole("Student")
 		(*data)["roles"] = roles
 		(*data)["permissions"] = permissions
-		// Создаёт токены
-		newAccessToken := GenerateNewAccessToken(email, roles, permissions)
-		newRefreshToken := GenerateNewRefreshToken(email)
-		// Записывает токен обновления
-		(*data)["refreshTokens"] = []interface{}{newRefreshToken}
-		// Записывает токен доступа
-		(*data)["accessToken"] = newAccessToken
-		// Добавляет
+		// Записывает новый токен обновления
+		new_refresh_token := GenerateNewRefreshToken(email)
+		(*data)["refresh_tokens"] = primitive.A{new_refresh_token}
+		// Записывает новый токен доступа
+		new_access_token := GenerateNewAccessToken((*data)["id"].(string), roles, permissions)
+		(*data)["access_token"] = new_access_token
+		log.Println("Добавление пользователя: 79%.")
+		// Добавляет в основной модуль | Сначала записать на сервер теста, а потом уже в БД
+		note_url := os.Getenv("TEST_MODULE_URL") + "/users/note" // url для запроса
+		note_token := GenerateNewAdminToken()                    // Создаём токен доступа админа
+		note_data := &map[string]interface{}{
+			"id":         (*data)["id"],
+			"nickname":   (*data)["nickname"],
+			"first_name": (*data)["first_name"],
+			"last_name":  (*data)["last_name"],
+			"patronimyc": (*data)["patronimyc"],
+			"email":      (*data)["email"],
+			"roles":      (*data)["roles"],
+		}
+		resp, err := DoPostRequestToService(note_url, "Bearer", note_token, note_data)
+		defer resp.Body.Close()
+		log.Println("Статус вставки пользователя в БД", resp.StatusCode)
+		if err != nil || resp.StatusCode != 200 {
+			return data, fmt.Errorf("Не удалось записать пользователя на серверную БД.")
+		}
 		log.Println("Добавление пользователя: 85%.")
-		_, err := collection.InsertOne(context.Background(), data)
+		// Добавляет в свою базу данных
+		_, err = collection.InsertOne(context.Background(), data)
 		log.Println("Добавление пользователя: 100% (полностью новая запись).")
 		return data, err
 	} else { // Если уже есть такой емэил
 		// перезаписываем данные, оставляя айди (и в моментах пароль)
 		log.Println("Добавление пользователя: 75%.")
 		// Меняет данные, которые нужно и те, которые не помешало бы
-		(*userWithSameEmail)["status"] = (*data)["status"]
-		(*userWithSameEmail)["loginToken"] = (*data)["loginToken"]
-		// Роль остаётся,
-		// токены создаются
-		newAccessToken := GenerateNewAccessToken(email, (*data)["roles"].([]string), (*data)["permissions"].([]string))
-		newRefreshToken := GenerateNewRefreshToken(email)
+		(*old_data)["status"] = (*data)["status"]
+		(*old_data)["login_token"] = (*data)["login_token"]
+		// Роль остаётся // токены создаются
+		roles := (*old_data)["roles"].(primitive.A)
+		new_access_token := GenerateNewAccessToken((*old_data)["id"].(string), roles, GenerateBasePermissionsListForRoles(roles))
+		new_refresh_token := GenerateNewRefreshToken(email)
 		// Добавляет новый токен обновления к существующим. Если не было других - оздаём первым
-		if refreshTokensSlice, ok := (*userWithSameEmail)["refreshTokens"].([]interface{}); ok {
-			refreshTokensSlice = append(refreshTokensSlice, newRefreshToken)
-			(*userWithSameEmail)["refreshTokens"] = refreshTokensSlice
+		if refresh_tokens_slice, ok := (*old_data)["refresh_tokens"].(primitive.A); ok {
+			refresh_tokens_slice = append(refresh_tokens_slice, new_refresh_token)
+			(*old_data)["refresh_tokens"] = refresh_tokens_slice
 		} else {
-			(*userWithSameEmail)["refreshTokens"] = []interface{}{newRefreshToken}
+			(*old_data)["refresh_tokens"] = primitive.A{new_refresh_token}
 		}
 		// Записывает токен доступа
-		(*data)["accessToken"] = newAccessToken
+		(*old_data)["access_token"] = new_access_token
 		// Заменяет в БД
 		_, err := collection.ReplaceOne(context.Background(),
-			bson.M{"id": (*userWithSameEmail)["id"]}, userWithSameEmail)
+			bson.M{"id": (*old_data)["id"]}, old_data)
 		log.Println("Добавление пользователя: 100% (замена старой записи email с новыми параметрами).")
-		return userWithSameEmail, err
+		return old_data, err
 	}
 }
 
@@ -156,7 +180,7 @@ func ReplaceFullUserInDatabase(id string, new_data *primitive.M) error {
 func InsertAuthorizationNoteToDatabase(data *primitive.M) (string, error) {
 	// Входя через сервис, повтора не будет, так что просто присваиваем айди и вставляем.
 	collection := mongoClient.Database("LatterProject").Collection("Authorizations")
-	(*data)["id"] = GenerateUniqueID()
+	(*data)["id"] = GenerateID()
 	_, err := collection.InsertOne(context.Background(), data)
 	log.Println("Добавление записи входа по", (*data)["id"].(string))
 	return (*data)["id"].(string), err
@@ -166,7 +190,7 @@ func InsertAuthorizationNoteToDatabase(data *primitive.M) (string, error) {
 func InsertRegistrationNoteToDatabase(data *primitive.M) (string, error) {
 	// Входя через сервис, повтора не будет, так что просто присваиваем айди и вставляем.
 	collection := mongoClient.Database("LatterProject").Collection("Registrations")
-	(*data)["id"] = GenerateUniqueID()
+	(*data)["id"] = GenerateID()
 	_, err := collection.ReplaceOne(context.Background(), &primitive.M{"email": (*data)["email"].(string)}, data,
 		options.Replace().SetUpsert(true))
 	log.Println("Добавление записи регистрации для", (*data)["email"].(string))
@@ -181,14 +205,26 @@ func GetFromDatabaseByValue(db_name string, key_name string, key string) (*primi
 	if collection == nil {
 		return nil, fmt.Errorf("Не удалось получить коллекцию " + db_name)
 	}
-	log.Println("Получение", db_name, ": 65%,")
-	// Принимает переменную и возвращает первого встреченного пользователя
+	log.Println("Получение", db_name, ": 65%")
+	// Делает фильтр
+	filter := primitive.M{key_name: key}
 	var user primitive.M
 	err := collection.FindOne(
 		context.Background(),
-		primitive.M{key_name: key},
+		filter,
 	).Decode(&user)
-	log.Println("Получение", db_name, ": 100%.")
+	// Запасной вариант
+	if err != nil {
+		log.Println("Провал поиска по значениям. Начинаем посик в массивах")
+		filter = primitive.M {key_name: primitive.M{"$in": []interface{}{key}},}
+		err = collection.FindOne(
+			context.Background(),
+			filter,
+		).Decode(&user)
+	}
+	// Принимает переменную и возвращает первого встреченного пользователя
+	
+	log.Println("Получение", db_name, ": 100%.", "Ошибка -", err)
 	return &user, err
 }
 
@@ -222,11 +258,12 @@ func DisconnectFromMongoDatabase() {
 }
 
 // Генерация айди для записей
-func GenerateUniqueID() string {
-	// Берём наносекунды с эпохи Unix
-	timestamp := time.Now().UnixNano()
+func GenerateID() string {
+	/*// Берём наносекунды с эпохи Unix
+	timestamp := time.Now().UnixMilli()
 	// Добавляем случайное число от 0 до 999
 	random := rand.Intn(1000)
 	// Собираем в одну строку
-	return fmt.Sprintf("%d%03d", timestamp, random)
+	result := fmt.Sprintf("%d%03d", timestamp, random)*/
+	return GenerateCode(9)
 }

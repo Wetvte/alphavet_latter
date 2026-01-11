@@ -6,11 +6,13 @@ import (
 	"os/signal"
 	"syscall"
 
+	"bytes"
 	"context"
 	"crypto/tls"
 	"encoding/json"
 	"io"
 	"log"
+	"math"
 	"math/rand"
 	"net/http"
 	"net/url"
@@ -35,15 +37,20 @@ func LaunchServer() {
 
 	// Регистрируем обработчики для URL
 	router.HandleFunc("/", HomeHandler)
-	router.HandleFunc("/registration", RegistrationHandler)
-	router.HandleFunc("/service_auth", ServiceAuthHandler)
-	router.HandleFunc("/code_auth", CodeAuthHandler)
-	router.HandleFunc("/default_auth", DefaultAuthHandler)
+	router.HandleFunc("/init/registration", InitRegistrationHandler)
+	router.HandleFunc("/verify/registration", VerifyRegistrationHandler)
+	router.HandleFunc("/auth/service", ServiceAuthHandler)
+	router.HandleFunc("/init/authorization", InitAuthorizationHandler)     // code
+	router.HandleFunc("/verify/authorization", VerifyAuthorizationHandler) // code
+	router.HandleFunc("/auth/default", DefaultAuthHandler)
 	router.HandleFunc("/auth_callback", ServiceAuthCallbackHandler)
-	router.HandleFunc("/check_auth", CheckAuthHandler)
-	router.HandleFunc("/confirm_auth", ConfirmAuthHandler)
-	router.HandleFunc("/update_auth", UpdateAuthHandler)
-	router.HandleFunc("/logout_all", LogoutAllHandler)
+	router.HandleFunc("/auth/check", CheckAuthHandler)
+	router.HandleFunc("/auth/confirm", ConfirmAuthHandler)
+	router.HandleFunc("/sub", GetSubHandler)
+	router.HandleFunc("/refresh", RefreshAccessHandler)
+	router.HandleFunc("/logout/all", LogoutAllHandler)
+	router.HandleFunc("/logout/user", LogoutUserHandler)
+	router.HandleFunc("/users/data/change", UserDataChangeHandler)
 
 	server = &http.Server{
 		Addr:    ":" + os.Getenv("SERVER_PORT"),
@@ -88,6 +95,12 @@ func LaunchServer() {
 func WriteResponse(w *http.ResponseWriter, data *map[string]interface{}, status int) {
 	(*w).WriteHeader(status)
 	json.NewEncoder(*w).Encode(*data)
+
+	if message, ok := (*data)["message"]; ok {
+		log.Println("Отправлен статус", status, "с сообщением:", message.(string))
+	} else {
+		log.Println("Отправлен статус", status)
+	}
 }
 
 // HomeHandler — обработчик для корневого URL (/)
@@ -98,32 +111,32 @@ func HomeHandler(w http.ResponseWriter, r *http.Request) {
 // DefaultAuthHandler — авторизирует обычной
 func DefaultAuthHandler(w http.ResponseWriter, r *http.Request) {
 	fmt.Println("Обработка авторизации обычной.")
-	fmt.Println("Получение данных из тела запроса.")
-	var requestData map[string]interface{}
-	err := json.NewDecoder(r.Body).Decode(&requestData)
+	requestData, err := GetDataFromBody(&r.Body)
 	if err != nil {
-		http.Error(w, "Чота не получилось прочитать тело запроса", http.StatusBadRequest)
+		WriteResponse(&w, &map[string]interface{}{
+			"message": "Чота не получилось прочитать тело запроса.",
+		}, 400)
 		return
 	}
-	fmt.Println("Получены данные в количестве: " + fmt.Sprint(len(requestData)))
 	// Добываем логин токен из заголовков
-	loginToken, err := GetTokenFromHeader(r.Header.Get("Authorization"))
-	if err != nil || loginToken == "" {
-		http.Error(w, "Это типа значит, что нет заголовка авторизации или токен некорректно передан", http.StatusUnauthorized)
+	login_token, err := GetTokenFromHeader(r.Header.Get("Authorization"))
+	if err != nil || login_token == "" {
+		WriteResponse(&w, &map[string]interface{}{
+			"message": "Это типа значит, что нет заголовка авторизации или токен некорректно передан.",
+		}, 400)
 		return
 	}
 	// Получает переданные данные авторизации
-	email := requestData["email"].(string)
-	password := requestData["password"].(string)
+	email := (*requestData)["email"].(string)
+	password := (*requestData)["password"].(string)
 	// Получает пользователя по почте
 	userData, err := GetFromDatabaseByValue("Users", "email", email)
 	// Проверяет наличие пользователя
 	if err != nil || (*userData)["password"] == nil || (*userData)["password"] == "" {
 		fmt.Println("Пользователя не существует.")
 		WriteResponse(&w, &map[string]interface{}{
-			"message":    "Пользователь не найден.",
-			"loginToken": loginToken,
-			"loginType":  "default",
+			"message":     "Пользователь не найден.",
+			"login_token": login_token,
 		}, 404)
 		fmt.Println("Отправлен ответ с провалом.")
 		return
@@ -132,195 +145,383 @@ func DefaultAuthHandler(w http.ResponseWriter, r *http.Request) {
 		if (*userData)["password"].(string) != password {
 			fmt.Println("Пароль не соответствует.")
 			WriteResponse(&w, &map[string]interface{}{
-				"message":    "Неверный пароль.",
-				"loginToken": loginToken,
-				"loginType":  "default",
+				"message":     "Неверный пароль.",
+				"login_token": login_token,
 			}, 403)
 			return
 		} else { // Если нет несоответствий
+			// Запрос на модуль тестировани для получения статуса пользователя
+			user_server_status, err, message := GetUserServerStatus((*userData)["id"].(string))
+			if err != nil {
+				fmt.Println(message)
+				WriteResponse(&w, &map[string]interface{}{
+					"message":     message,
+					"login_token": login_token,
+				}, 500)
+				return
+			}
+			// Проверяем статус
+			if user_server_status == "Blocked" {
+				fmt.Println("Пользователь заблокирован.")
+				WriteResponse(&w, &map[string]interface{}{
+					"message":     "Пользователь заблокирован.",
+					"login_token": login_token,
+				}, 403)
+				return
+			}
+
 			// Записываем в БД (Да, пользователь уже есть, но обновляем логин токен (остальные токены создаём) и способ входа)
 			// Все основные данные остаются прежними (титульная информаця, пароль и другое)
 			(*userData)["status"] = "WaitingAuthorizingConfirm"
-			(*userData)["loginToken"] = loginToken
-			err := ReplaceFullUserInDatabase((*userData)["id"].(string), userData)
+			(*userData)["login_token"] = login_token
+			_, err = InsertUserToDatabase(userData)
 			if err != nil {
 				WriteResponse(&w, &map[string]interface{}{
-					"message":    "Ошибка авторизации, ну типа.",
-					"loginToken": loginToken,
+					"message":     "Ошибка авторизации, ну типа.",
+					"login_token": login_token,
 				}, 500)
 				return
 			}
 			// Возвращает успех, если всё хорошо
 			WriteResponse(&w, &map[string]interface{}{
-				"message":    "Авторизация успешна.",
-				"loginToken": loginToken,
-				"loginType":  "default",
+				"message":     "Авторизация успешна.",
+				"login_token": login_token,
 			}, 200)
 		}
 	}
 }
 
-// CodeAuthHandler - создаёт и отправляет код пользователю на аккаунт
-func CodeAuthHandler(w http.ResponseWriter, r *http.Request) {
+// VerifyAuthorizationHandler - создаёт и отправляет код пользователю на аккаунт
+func VerifyAuthorizationHandler(w http.ResponseWriter, r *http.Request) {
 	fmt.Println("Обработка авторизации через код.")
-	fmt.Println("Получение данных из тела запроса.")
-	var requestData map[string]interface{}
-	err := json.NewDecoder(r.Body).Decode(&requestData)
+	requestData, err := GetDataFromBody(&r.Body)
 	if err != nil {
-		http.Error(w, "Чота не получилось прочитать тело запроса", http.StatusBadRequest)
+		WriteResponse(&w, &map[string]interface{}{
+			"message": "Чота не получилось прочитать тело запроса.",
+		}, 400)
 		return
 	}
-	fmt.Println("Получены данные в количестве: " + fmt.Sprint(len(requestData)))
-
-	// Добываем почту
-	email, ok := requestData["email"].(string)
+	// Добываем state
+	state, ok := (*requestData)["state"].(string)
 	if !ok {
-		// ошибку
-	}
-
-	// Если до этого не был отправлен код
-	if requestData["stage"] == "cheking" {
-		// Добываем логин токен из заголовков
-		loginToken, err := GetTokenFromHeader(r.Header.Get("Authorization"))
-		if err != nil || loginToken == "" {
-			http.Error(w, "Это типа значит, что нет заголовка авторизации или токен некорректно передан", http.StatusUnauthorized)
-			return
-		}
-		// Получаем пользователя
-		_, err = GetFromDatabaseByValue("Users", "email", email)
-		if err != nil {
-			// ошибку
-		}
-
-		// Генерирует код
-		code := GenerateCode(6)
-		// Генерирует токен
-		authorizationToken := GenerateNewAuthorizationToken(email)
-
-		// Сохраняем в БД, для дальнейшей пляски
-		_, err = InsertAuthorizationNoteToDatabase(&primitive.M{
-			"status":             "AuthorizingWithCode",
-			"sessionToken":       requestData["sessionToken"],
-			"loginToken":         loginToken,
-			"loginType":          "code",
-			"code":               code,
-			"email":              email,
-			"authorizationToken": authorizationToken,
-		})
-
 		WriteResponse(&w, &map[string]interface{}{
-			"authorizationToken": authorizationToken,
-		}, 200)
-	} else /*if requestData["stage"] == "verifing"*/ {
-		// Если отправлен код
-		// Добываем токен авторизации из заголовков
-		authorizationToken, err := GetTokenFromHeader(r.Header.Get("Authorization"))
-		if err != nil || authorizationToken == "" {
-			http.Error(w, "Это типа значит, что нет заголовка авторизации или токен некорректно передан", http.StatusUnauthorized)
-			return
-		}
-
-		// Получаем авторизацию
-		authData, err := GetFromDatabaseByValue("Authorizations", "email", email)
-		if err != nil {
-			WriteResponse(&w, &map[string]interface{}{
-				"message": "Ошибка получения записи об авторизации.",
-			}, 500)
-			return
-		}
-		// Добываем код
-		code, ok := requestData["code"].(string)
-		if !ok {
-			WriteResponse(&w, &map[string]interface{}{
-				"message": "Ошибка получения кода из записи об авторизации.",
-			}, 500)
-			return
-		}
-		// Сверяем код
-		if code != (*authData)["code"].(string) {
-			WriteResponse(&w, &map[string]interface{}{
-				"message": "Коды не совпадают.",
-			}, 400)
-			return
-		}
-
-		// Удаляет запись об авторизации
-		DeleteFromDatabase("Authorizations", "id", (*authData)["id"].(string))
-		// Записывает авторизированного пользователя с персональными токенами
-		_, err = InsertUserToDatabase(&primitive.M{
-			"status":     "WaitingAuthorizingConfirm",
-			"loginToken": (*authData)["loginToken"].(string),
-			"email":      (*authData)["email"].(string),
-		})
-		if err != nil {
-			WriteResponse(&w, &map[string]interface{}{
-				"message": "Ошибка авторизации.",
-			}, 500)
-			return
-		}
-
-		log.Println("Сохранение кук сессии ", (*authData)["sessionToken"].(string))
-		// Ставим куки
-		http.SetCookie(w, &http.Cookie{
-			Name:     "sessionToken",
-			Value:    (*authData)["sessionToken"].(string),
-			Path:     "/",
-			HttpOnly: true,
-			// Secure: true,
-			Domain: "localhost",
-		})
-		// Ответ по цепочке дойдёт до страницы, с которой будет запрос на автовход
-		WriteResponse(&w, &map[string]interface{}{
-			"message": "Авторизация успешна.",
-		}, 200)
+			"message": "Чота не получилось прочитать состояние запроса",
+		}, 400)
 		return
 	}
+
+	// Добываем токен из заголовков
+	login_token, err := GetTokenFromHeader(r.Header.Get("Authorization"))
+	if err != nil || login_token == "" {
+		WriteResponse(&w, &map[string]interface{}{
+			"message": "Это типа значит, что нет заголовка авторизации или токен некорректно передан.",
+		}, 400)
+		return
+	}
+
+	// Получаем авторизацию
+	auth_data, err := GetFromDatabaseByValue("Authorizations", "state", state)
+	if err != nil {
+		WriteResponse(&w, &map[string]interface{}{
+			"message": "Запись авторизации не найдена.",
+		}, 401)
+		return
+	}
+	// Добываем код
+	code, ok := (*requestData)["code"].(string)
+	if !ok {
+		WriteResponse(&w, &map[string]interface{}{
+			"message": "Код в запросе отсутствует.",
+		}, 400)
+		return
+	}
+	// Сверяем код
+	if code != (*auth_data)["code"].(string) {
+		WriteResponse(&w, &map[string]interface{}{
+			"message": "Неверный код.",
+		}, 409)
+		return
+	}
+	if IsExpired((*auth_data)["exp_time"].(int64)) {
+		DeleteFromDatabase("Registrations", "state", state)
+		WriteResponse(&w, &map[string]interface{}{
+			"message": "Код больше не действителен.",
+		}, 401)
+		return
+	}
+
+	// Удаляет запись авторизации
+	DeleteFromDatabase("Authotizations", "state", state)
+	// Записывает авторизированного пользователя с персональными токенами
+	_, err = InsertUserToDatabase(&primitive.M{
+		"status":      "WaitingAuthorizingConfirm",
+		"login_token": login_token,
+		"email":       (*auth_data)["email"].(string),
+	})
+	if err != nil {
+		WriteResponse(&w, &map[string]interface{}{
+			"message": "Ошибка авторизации.",
+		}, 500)
+		return
+	}
+
+	// Ответ по цепочке дойдёт до страницы, с которой будет запрос на автовход
+	WriteResponse(&w, &map[string]interface{}{
+		"message": "Авторизация успешна.",
+	}, 200)
+	return
+}
+
+// Для создания кода и подготовки подтверждения кодом (пока только авторизация, но в теории можно перенести сюда создание кода для регистрации)
+func InitRegistrationHandler(w http.ResponseWriter, r *http.Request) {
+	fmt.Println("Создание кода для регитрации.")
+	requestData, err := GetDataFromBody(&r.Body)
+	if err != nil {
+		WriteResponse(&w, &map[string]interface{}{
+			"message": "Чота не получилось прочитать тело запроса.",
+		}, 400)
+		return
+	}
+
+	log.Println("Приступаем к проверке данных на доступ к регистрации.")
+	// Проверяет имена
+	// Ник
+	nickname := (*requestData)["nickname"].(string)
+	message, err := CheckName(nickname, false)
+	if err != nil {
+		log.Println(message)
+		WriteResponse(&w, &map[string]interface{}{
+			"message": message,
+		}, 400)
+		return
+	}
+	// Фамилия
+	last_name := (*requestData)["last_name"].(string)
+	message, err = CheckName(last_name, true)
+	if err != nil {
+		log.Println(message)
+		WriteResponse(&w, &map[string]interface{}{
+			"message": message,
+		}, 400)
+		return
+	}
+	// Имя
+	first_name := (*requestData)["first_name"].(string)
+	message, err = CheckName(first_name, true)
+	if err != nil {
+		log.Println(message)
+		WriteResponse(&w, &map[string]interface{}{
+			"message": message,
+		}, 400)
+		return
+	}
+	// Отчество
+	patronimyc := (*requestData)["patronimyc"].(string)
+	message, err = CheckName(patronimyc, true)
+	if err != nil {
+		log.Println(message)
+		WriteResponse(&w, &map[string]interface{}{
+			"message": message,
+		}, 400)
+		return
+	}
+	// Проверяет пароль
+	password := (*requestData)["password"].(string)
+	message, err = CheckPasswordAndRepeat(password, (*requestData)["repeat_password"].(string))
+	if err != nil {
+		log.Println(message)
+		WriteResponse(&w, &map[string]interface{}{
+			"message": message,
+		}, 400)
+		return
+	}
+
+	// Получает пользователя по почте
+	email := (*requestData)["email"].(string)
+	userData, err := GetFromDatabaseByValue("Users", "email", email)
+	// Проверяет наличие пользователя и пароля у него (если пользователь уже входил через сервисы, но не регался, даёт зарегаться)
+	if err == nil {
+		password, ok := (*userData)["password"]
+		if ok && len(password.(string)) > 0 {
+			log.Println("Пользователь уже зарегистрирован.")
+			WriteResponse(&w, &map[string]interface{}{
+				"message": "Пользователь уже зарегистрирован.",
+			}, 409)
+			return
+		}
+	}
+
+	log.Println("Первая стадия проверки данных окончена. Приступаем к проверке действительности email.")
+	// Генерирует код
+	code := GenerateCode(6)
+	// Пытается отправить код по емэил
+	err = SendConfirmationEmail(email, code)
+	if err != nil {
+		log.Println("Ошибка отправки email.")
+		WriteResponse(&w, &map[string]interface{}{
+			"message": "Ошибка при отправке подтверждения. Возможно, почта введена некорректно.",
+		}, 400)
+		return
+	}
+	log.Println("Email отправлен.")
+	// Генерирует state регистрации
+	registration_state := GenerateState()
+	log.Println("Сгенерирован state регистрации ", registration_state)
+	// Сохраняем в БД, как юзера, для дальнейшей пляски (при подтверждении)
+	_, err = InsertRegistrationNoteToDatabase(&primitive.M{
+		"status":     "Registring",
+		"state":      registration_state,
+		"code":       code,
+		"email":      email,
+		"nickname":   nickname,
+		"first_name": first_name,
+		"last_name":  last_name,
+		"patronimyc": patronimyc,
+		"password":   password,
+		"exp_time":   GetTimeFromNow(60 * 5), // 5 минут доступно
+	})
+	// Если ошибка
+	if err != nil {
+		WriteResponse(&w, &map[string]interface{}{
+			"message": "Ошибка при... Я не придумал.",
+		}, 500)
+		return
+	}
+
+	log.Println("State регистрации отправляется обратно. Ожидается подтверждение.")
+	// Отправляет state обратно, как доказательство успеха
+	WriteResponse(&w, &map[string]interface{}{
+		"message": fmt.Sprintf("Регистрация доступна. Введите код, который был выслан на почтовый ящик %s.", email),
+		"state":   registration_state,
+	}, 200)
+}
+
+func InitAuthorizationHandler(w http.ResponseWriter, r *http.Request) {
+	fmt.Println("Создание кода для авторизации.")
+	requestData, err := GetDataFromBody(&r.Body)
+	if err != nil {
+		WriteResponse(&w, &map[string]interface{}{
+			"message": "Чота не получилось прочитать тело запроса.",
+		}, 400)
+		return
+	}
+
+	// Получаем почту
+	email := (*requestData)["email"].(string)
+	// Получаем пользователя
+	userData, err := GetFromDatabaseByValue("Users", "email", email)
+	if err != nil {
+		WriteResponse(&w, &map[string]interface{}{
+			"message": "Пользователь не найден.",
+		}, 404)
+	}
+
+	// Запрос на модуль тестировани для получения статуса пользователя
+	user_server_status, err, message := GetUserServerStatus((*userData)["id"].(string))
+	if err != nil {
+		fmt.Println(message)
+		WriteResponse(&w, &map[string]interface{}{
+			"message": message,
+		}, 500)
+		return
+	}
+	// Проверяем статус
+	if user_server_status == "Blocked" {
+		fmt.Println("Пользователь заблокирован.")
+		WriteResponse(&w, &map[string]interface{}{
+			"message": "Пользователь заблокирован.",
+		}, 403)
+		return
+	}
+
+	// Генерирует код
+	code := GenerateCode(6)
+	// Генерируем уникальный state
+	authorization_state := GenerateState()
+
+	// Отправляет код Основному модулю
+	text := "Получен запрос на вход " + time.Now().Format("15:04 02.01.2006") + ".Код подтверждения: " + code
+	recipient := (*userData)["id"].(string)
+	news := map[string]interface{}{
+		"recipient": recipient,
+		"text":      text,
+	}
+	newsResponse, err := DoPostRequestToService(os.Getenv("TEST_MODULE_URL")+"/news/send",
+		"Bearer", GenerateNewAdminToken(), &news)
+	defer newsResponse.Body.Close()
+	if err != nil || newsResponse.StatusCode != 200 {
+		fmt.Println("Не удалось отправить код. Запрос -", newsResponse)
+		WriteResponse(&w, &map[string]interface{}{
+			"message": "Не удалось отправить код.",
+		}, 500)
+		return
+	}
+
+	// Сохраняем в БД, для дальнейшей пляски
+	_, err = InsertAuthorizationNoteToDatabase(&primitive.M{
+		"status":     "AuthorizingWithCode",
+		"login_type": "code",
+		"code":       code,
+		"state":      authorization_state,
+		"email":      email,
+		"exp_time":   GetTimeFromNow(60 * 5), // 5 минут на вход
+	})
+
+	log.Println("State авторизации отправляется обратно. Ожидается подтверждение.")
+	// Отправляет state обратно, как доказательство успеха
+	WriteResponse(&w, &map[string]interface{}{
+		"message": "Код отправлен на аккаунт, к которому привязана почта " + email,
+		"state":   authorization_state,
+	}, 200)
 }
 
 // ServiceAuthHandler — перенаправляет пользователя на страницу авторизации сервиса
 func ServiceAuthHandler(w http.ResponseWriter, r *http.Request) {
 	fmt.Println("Обработка авторизации через сервис.")
-	fmt.Println("Получение данных из тела запроса.")
-	var requestData map[string]interface{}
-	err := json.NewDecoder(r.Body).Decode(&requestData)
+	requestData, err := GetDataFromBody(&r.Body)
 	if err != nil {
-		http.Error(w, "Чота не получилось прочитать тело запроса", http.StatusBadRequest)
+		WriteResponse(&w, &map[string]interface{}{
+			"message": "Чота не получилось прочитать тело запроса.",
+		}, 400)
 	}
-	fmt.Println("Получены данные в количестве: " + fmt.Sprint(len(requestData)))
 
 	// Проверяет тип сервиса авторизации
-	if requestData["serviceType"] != "github" && requestData["serviceType"] != "yandex" {
-		http.Error(w, "А чо с запросом то", http.StatusBadRequest)
+	if (*requestData)["service_type"] != "github" && (*requestData)["service_type"] != "yandex" {
+		WriteResponse(&w, &map[string]interface{}{
+			"message": "А что с вопросом-то?",
+		}, 400)
 		return
 	}
 	// Добываем логин токен из заголовков
-	loginToken, err := GetTokenFromHeader(r.Header.Get("Authorization"))
-	if err != nil || loginToken == "" {
-		http.Error(w, "Это типа значит, что нет заголовка авторизации или токен некорректно передан", http.StatusUnauthorized)
+	login_token, err := GetTokenFromHeader(r.Header.Get("Authorization"))
+	if err != nil || login_token == "" {
+		WriteResponse(&w, &map[string]interface{}{
+			"message": "Это типа значит, что нет заголовка авторизации или токен некорректно передан.",
+		}, 400)
 		return
 	}
 
 	// Коллбэк авторизации для возвращения на клиент
 	// Генерируем уникальный service_state
-	service_state := fmt.Sprintf("%x", time.Now().UnixNano())
+	service_state := GenerateState()
 	log.Println("Сгенерирован service_state", service_state)
 	// Сохраняем в БД, как юзера, для дальнейшей пляски (при коллбэке)
 	_, err = InsertAuthorizationNoteToDatabase(&primitive.M{
 		"status":                    "AuthorizingWithService",
 		"auth_service_state":        service_state,
-		"loginToken":                loginToken,
-		"sessionToken":              requestData["sessionToken"],
-		"loginType":                 requestData["serviceType"],
-		"auth_service_callback_url": requestData["callback_url"],
+		"login_token":               login_token,
+		"session_token":             (*requestData)["session_token"],
+		"login_type":                (*requestData)["service_type"],
+		"auth_service_callback_url": (*requestData)["callback_url"],
 	})
-	log.Println("Передан callback_url", requestData["callback_url"])
+	log.Println("Передан callback_url", (*requestData)["callback_url"])
 
 	// Если ошибка
 	if err != nil {
 		log.Println(err)
 	}
 	// Создаём конфиг
-	oAuthConfig, err := CreateOAuthConfig(requestData["serviceType"].(string))
+	oAuthConfig, err := CreateOAuthConfig((*requestData)["service_type"].(string))
 	if err != nil { // Не создался конфиг, но такого не будет
 		log.Println(err)
 	}
@@ -337,8 +538,8 @@ func ServiceAuthCallbackHandler(w http.ResponseWriter, r *http.Request) {
 	getted_state := r.URL.Query().Get("state")
 
 	// По state получаем данные авторизации сервисом
-	authData, err := GetFromDatabaseByValue("Authorizations", "auth_service_state", getted_state)
-	callback_url := (*authData)["auth_service_callback_url"].(string) // Заранее берём коллбэк
+	auth_data, err := GetFromDatabaseByValue("Authorizations", "auth_service_state", getted_state)
+	callback_url := (*auth_data)["auth_service_callback_url"].(string) // Заранее берём коллбэк
 	log.Println("Коллбэк для возврата токена сессии:", callback_url)
 	// Проверка на успех получения
 	if err != nil {
@@ -348,9 +549,9 @@ func ServiceAuthCallbackHandler(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Получает тип входа и проверяет (но вряд ли будет ошибка)
-	loginType := (*authData)["loginType"].(string) // r.URL.Query().Get("type")
-	log.Println("Логин type:", loginType)
-	if loginType != "github" && loginType != "yandex" {
+	login_type := (*auth_data)["login_type"].(string) // r.URL.Query().Get("type")
+	log.Println("Логин type:", login_type)
+	if login_type != "github" && login_type != "yandex" {
 		// Удаляет запись входа
 		DeleteFromDatabase("Authorizations", "auth_service_state", getted_state)
 		http.Error(w, "А где тип входа, сбстна (Ну или не соответствует)", http.StatusBadRequest)
@@ -368,7 +569,7 @@ func ServiceAuthCallbackHandler(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Создаём конфиг
-	config, err := CreateOAuthConfig(loginType)
+	config, err := CreateOAuthConfig(login_type)
 	if err != nil {
 		// Удаляет запись входа
 		DeleteFromDatabase("Authorizations", "auth_service_state", getted_state)
@@ -382,9 +583,9 @@ func ServiceAuthCallbackHandler(w http.ResponseWriter, r *http.Request) {
 	// так ещё и не выдаёт refresh токен, а только access. УЖАС !!!
 
 	// Создаём структуру данных-конфиг для обмены code
-	url_values, err := CreateUrlValues(loginType)
+	url_values, err := CreateUrlValues(login_type)
 	url_values.Set("code", code)
-	if loginType == "yandex" {
+	if login_type == "yandex" {
 		url_values.Set("grant_type", "authorization_code")
 	}
 	if err != nil { // Удаляет запись входа
@@ -414,7 +615,7 @@ func ServiceAuthCallbackHandler(w http.ResponseWriter, r *http.Request) {
 
 	serviceTokenData := make(map[string]string)
 	// Обрабатывем в соответствии с типом сервиса его ответ и записываем токены
-	if loginType == "yandex" {
+	if login_type == "yandex" {
 		// Разбираем ответ (Яндекс возвращает JSON)
 		var parsedData map[string]interface{}
 		err := json.Unmarshal(codeExchangeResponseBody, &parsedData)
@@ -424,10 +625,10 @@ func ServiceAuthCallbackHandler(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		// Записываем токены
-		serviceTokenData["accessToken"] = parsedData["access_token"].(string)
-		serviceTokenData["refreshToken"] = parsedData["refresh_token"].(string)
-		log.Println("От Яндекса получены токены: accessToken -", serviceTokenData["accessToken"], "И refreshToken -", serviceTokenData["refreshToken"])
-	} else if loginType == "github" {
+		serviceTokenData["access_token"] = parsedData["access_token"].(string)
+		serviceTokenData[" refresh_token"] = parsedData["refresh_token"].(string)
+		log.Println("От Яндекса получены токены: access_token -", serviceTokenData["access_token"], "И  refresh_token -", serviceTokenData[" refresh_token"])
+	} else if login_type == "github" {
 		// Разбираем ответ
 		params, err := url.ParseQuery(string(codeExchangeResponseBody))
 		if err != nil { // Удаляет запись входа
@@ -443,37 +644,53 @@ func ServiceAuthCallbackHandler(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		// Получаем access_token
-		serviceTokenData["accessToken"] = params.Get("access_token")
-		serviceTokenData["refreshToken"] = ""
-		log.Println("От Github получен токен: accessToken -", serviceTokenData["accessToken"])
+		serviceTokenData["access_token"] = params.Get("access_token")
+		serviceTokenData[" refresh_token"] = ""
+		log.Println("От Github получен токен: access_token -", serviceTokenData["access_token"])
 	}
-	// Проверка accessToken
-	if serviceTokenData["accessToken"] == "" {
+	// Проверка access_token
+	if serviceTokenData["access_token"] == "" {
 		DeleteFromDatabase("Authorizations", "auth_service_state", getted_state)
 		http.Error(w, "От Сервиса не получен токен доступа", http.StatusInternalServerError)
 		return
 	}
 
 	// Получает данные с сайте с помощью клиента через токен доступа
-	gettedUserData, err := GetUserDataFromService(serviceTokenData["accessToken"], loginType)
+	gettedUserData, err := GetUserDataFromService(serviceTokenData["access_token"], login_type)
 	if err != nil {
 		DeleteFromDatabase("Authorizations", "auth_service_state", getted_state)
 		http.Error(w, "Ошибка при чтении данных с клиента", http.StatusInternalServerError)
 		return
 	}
 	// Сортирует полученные данные
-	sortedUserData := SortServiceUserData(gettedUserData, loginType)
-	log.Println("Имя пользователя: ", (*sortedUserData)["name"])
+	sortedUserData := SortServiceUserData(gettedUserData, login_type)
+	log.Println("Имя пользователя: ", (*sortedUserData)["nickname"])
 	log.Println("Емэил пользователя: ", (*sortedUserData)["email"])
 	// Удаляет запись об авторизации
-	DeleteFromDatabase("Authorizations", "id", (*authData)["id"].(string))
+	DeleteFromDatabase("Authorizations", "id", (*auth_data)["id"].(string))
+
+	// Запрос на модуль тестировани для получения статуса пользователя
+	user_server_status, err, message := GetUserServerStatus((*gettedUserData)["id"].(string))
+	if err != nil {
+		http.Error(w, message, http.StatusInternalServerError)
+		http.Redirect(w, r, callback_url, http.StatusFound)
+		fmt.Println(message)
+		return
+	}
+	// Проверяем статус
+	if user_server_status == "Blocked" {
+		http.Error(w, "Пользователь заблокирован.", 403)
+		http.Redirect(w, r, callback_url, http.StatusFound)
+		return
+	}
+
 	// Записывает авторизированного пользователя с персональными токенами
 	_, err = InsertUserToDatabase(&primitive.M{
-		"status":     "WaitingAuthorizingConfirm",
-		"id":         (*authData)["id"].(string),
-		"loginToken": (*authData)["loginToken"].(string),
-		"name":       (*sortedUserData)["name"],
-		"email":      (*sortedUserData)["email"],
+		"status":      "WaitingAuthorizingConfirm",
+		"id":          (*auth_data)["id"].(string),
+		"login_token": (*auth_data)["login_token"].(string),
+		"nickname":    (*sortedUserData)["nickname"],
+		"email":       (*sortedUserData)["email"],
 	})
 	// Есть важный недостаток: при авторизации через сервис, который не выдёт почту (GitHub), каждая авторизация создаст свою запись в БД
 	// P.S. Уже в прошлом, я научился получать почту с гх и без неё не будет входа - только ошибка
@@ -482,11 +699,11 @@ func ServiceAuthCallbackHandler(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "Ошибка при создании пользователя", http.StatusInternalServerError)
 	}
 
-	log.Println("Сохранение кук сессии ", (*authData)["sessionToken"].(string))
+	log.Println("Сохранение кук сессии ", (*auth_data)["session_token"].(string))
 	// Ставим куки
 	http.SetCookie(w, &http.Cookie{
-		Name:     "sessionToken",
-		Value:    (*authData)["sessionToken"].(string),
+		Name:     "session_token",
+		Value:    (*auth_data)["session_token"].(string),
 		Path:     "/",
 		HttpOnly: true,
 		// Secure: true,
@@ -498,318 +715,153 @@ func ServiceAuthCallbackHandler(w http.ResponseWriter, r *http.Request) {
 }
 
 // Регистрация нового пользователя
-func RegistrationHandler(w http.ResponseWriter, r *http.Request) {
+func VerifyRegistrationHandler(w http.ResponseWriter, r *http.Request) {
 	// Получает данные из тела запроса
-	var requestData map[string]interface{}
-	err := json.NewDecoder(r.Body).Decode(&requestData)
+	requestData, err := GetDataFromBody(&r.Body)
 	if err != nil {
-		http.Error(w, "Чота не получилось прочитать тело запроса", http.StatusBadRequest)
-	}
-	log.Println("Обработка запроса на регистрацию с параметром", requestData["stage"])
-
-	// Если проверяет на возможность регистрации
-	if requestData["stage"] == "filling" {
-		log.Println("Приступаем к проверке данных на доступ к регистрации.")
-		// Получает общие переданные данные регистрации
-		email := requestData["email"].(string)
-		name := requestData["name"].(string)
-		password := requestData["password"].(string)
-		// Проверяет имя
-		message, err := CheckRegistrationName(name)
-		if err != nil {
-			log.Println(message)
-			WriteResponse(&w, &map[string]interface{}{
-				"message": message,
-			}, 400)
-			return
-		}
-		// Проверяет пароль
-		message, err = CheckRegistrationPassword(password, requestData["repeat_password"].(string))
-		if err != nil {
-			log.Println(message)
-			WriteResponse(&w, &map[string]interface{}{
-				"message": message,
-			}, 400)
-			return
-		}
-
-		// Получает пользователя по почте
-		userData, err := GetFromDatabaseByValue("Users", "email", email)
-		// Проверяет наличие пользователя и пароля у него (если пользователь уже входил через сервисы, но не регался, даёт зарегаться)
-		if err == nil {
-			password, ok := (*userData)["password"]
-			if ok && len(password.(string)) > 0 {
-				log.Println("Пользователь уже зарегистрирован.")
-				WriteResponse(&w, &map[string]interface{}{
-					"message": "Пользователь уже зарегистрирован.",
-				}, 409)
-				return
-			}
-		}
-
-		log.Println("Первая стадия проверки данных окончена. Приступаем к проверке действительности email.")
-		// Генерирует код
-		verifyCode := GenerateCode(6)
-		// Пытается отправить код по емэил
-		err = SendConfirmationEmail(email, verifyCode)
-		if err != nil {
-			log.Println("Ошибка отправки email.")
-			WriteResponse(&w, &map[string]interface{}{
-				"message": "Ошибка при отправке подтверждения. Возможно, почта введена некорректно.",
-			}, 400)
-			return
-		}
-		log.Println("Email отправлен.")
-		// Генерирует токен регистрации
-		registrationToken := GenerateNewRegistrationToken(email)
-		log.Println("Сгенерирован токен регистрации ", registrationToken)
-		// Сохраняем в БД, как юзера, для дальнейшей пляски (при подтверждении)
-		_, err = InsertRegistrationNoteToDatabase(&primitive.M{
-			"status":            "Registring",
-			"registrationToken": registrationToken,
-			"verifyCode":        verifyCode,
-			"email":             email,
-			"name":              name,
-			"password":          password,
-		})
-		// Если ошибка
-		if err != nil {
-			WriteResponse(&w, &map[string]interface{}{
-				"message": "Ошибка при... Я не придумал.",
-			}, 500)
-			return
-		}
-
-		log.Println("Токен регистрации отправляется обратно. Ожидается подтверждение.")
-		// Отправляет токен и статус обратно, как доказательство успеха
 		WriteResponse(&w, &map[string]interface{}{
-			"message":           fmt.Sprintf("Регистрация доступна. Введите код, который был выслан на почтовый ящик %s.", email),
-			"registrationToken": registrationToken,
-		}, 200)
-	} else /*verifing*/ { // Если подтверждает регистрацию
-		// Получает токен из заголовка
-		log.Println("Начинаем проверку кода подтверждения.")
-		registrationToken, err := GetTokenFromHeader(r.Header.Get("Authorization"))
-		if err != nil || registrationToken == "" {
-			log.Println("Токен некорректен.")
-			WriteResponse(&w, &map[string]interface{}{
-				"message": "Это типа значит, что нет заголовка регистрации или токен некорректно передан",
-			}, 400)
-			return
-		}
-		log.Println("Подтверждаем регистрацию для токена", registrationToken)
-		// Проверка времени регистрации
-		if IsOwnTokenExpired(registrationToken) {
-			// Удаляем запись и возвращаем ответ
-			log.Println("Время регистрации истекло.")
-			DeleteFromDatabase("Registrations", "registrationToken", registrationToken)
-			WriteResponse(&w, &map[string]interface{}{
-				"message": "Время регистрации истекло.",
-			}, 401)
-			return
-		}
-		// Получает данные и проверяет токен на соответствие
-		regData, err := GetFromDatabaseByValue("Registrations", "registrationToken", registrationToken)
-		// Проверяет наличие записи о регистрации
-		if err != nil {
-			// Удаляем запись и возвращаем ответ
-			DeleteFromDatabase("Registrations", "registrationToken", registrationToken)
-			WriteResponse(&w, &map[string]interface{}{
-				"message": "Пользователь уже зарегистрирован. Каким образом было дано разрешение, ёпт?",
-			}, 409)
-			return
-		}
+			"message": "Чота не получилось прочитать тело запроса.",
+		}, 400)
+	}
+	log.Println("Обработка запроса на регистрацию с параметром", (*requestData)["stage"])
 
-		// Проверяет код подтверждения
-		if (*regData)["verifyCode"].(string) != requestData["verifyCode"] {
-			log.Println("Несовпадение кодов:", (*regData)["verifyCode"].(string), "и", requestData["verifyCode"])
-			// Взвращаем ответъ, что код не тот
-			WriteResponse(&w, &map[string]interface{}{
-				"message": "Неверный код подтверждения.",
-			}, 400)
-			return
-		}
-		log.Println("Коды совпадают.")
-		// Регистрирует пользователя в БД
-		DeleteFromDatabase("Registrations", "id", (*regData)["id"].(string))
-		_, err = InsertUserToDatabase(&primitive.M{
-			"status":   "LogoutedGlobal",
-			"name":     (*regData)["name"].(string),
-			"email":    (*regData)["email"].(string),
-			"password": (*regData)["password"].(string),
-		})
-		// *Если указать тип входа default на странице клиента при нажатии на кнопку входа, вход будет автоматическим
-		if err != nil {
-			WriteResponse(&w, &map[string]interface{}{
-				"message": "Не удалось зарегистрировать пользователя.",
-			}, 500)
-			return
-		}
-		// И возвращает успех вместе с параметрами для входа
+	log.Println("Начинаем проверку кода подтверждения.")
+	// Добываем state
+	state, ok := (*requestData)["state"].(string)
+	if !ok {
 		WriteResponse(&w, &map[string]interface{}{
-			"message": "Регистрация успешна.",
-		}, 200)
+			"message": "Чота не получилось прочитать состояние запроса",
+		}, 400)
+		return
 	}
-}
-func CheckRegistrationName(name string) (string, error) {
-	// Проверяем заполненность имени
-	if name == "" {
-		return "Имя не может быть пустым.", fmt.Errorf("Чо за имя?")
-	}
-	// Проверка начала и окончания имени
-	if name[0] == ' ' {
-		return "Имя не может начинаться на пробел.", fmt.Errorf("Зачем...")
-	}
-	if name[len(name)-1] == ' ' {
-		return "Имя не может оканчиваться на пробел.", fmt.Errorf("Зачем...")
-	}
-	// Отсутствие запрещённых символов
-	availableSymbols := "АаБбВвГгДдЕеЁёЖжЗзИиЙйКкЛлМмНнОоПпРрСсТтУуФфХхЦцЧчШшЩщЪъЫыЬьЭэЮюЯяAaBbCcDdEeFfGgHhIiJjKkLlMmNnOoPpQqRrSsTtUuVvWwXxYyZz0123456789:^_-!?*()[]<> " // Пробел можно
-	for _, char := range name {
-		if !strings.ContainsRune(availableSymbols, char) {
-			log.Println("Ошибка в имени: Недопустимый символ -", char)
-			return "Имя может состоять только из русских или латинских букв, арабских цифр, символов :^_-!?*()[]<> и пробелов.", fmt.Errorf("Чо за имя?")
-		}
-	}
-	// Длина
-	min_duration, err := strconv.Atoi(os.Getenv("NAME_MIN_DURATION"))
+	log.Println("Подтверждаем регистрацию для state", state)
+
+	// Получаем запись
+	reg_data, err := GetFromDatabaseByValue("Registrations", "state", state)
 	if err != nil {
-		min_duration = 1
-	}
-	max_duration, err := strconv.Atoi(os.Getenv("NAME_MAX_DURATION"))
-	if err != nil {
-		max_duration = 10
-	}
-	if len(name) < min_duration || len(name) > max_duration {
-		return fmt.Sprintf("Длина имени должна быть в пределах от %d до %d символов",
-			min_duration, max_duration), err
-	}
-	return "Имя одобрено.", nil
-}
-func CheckRegistrationPassword(password string, repeat_password string) (string, error) {
-	// Проверяем заполненность основных полей
-	if password == "" {
-		return "Пароль не может быть пустым.", fmt.Errorf("Чо за пароль?")
-	}
-	// Отсутствие запрещённых символов
-	availableSymbols := "AaBbCcDdEeFfGgHhIiJjKkLlMmNnOoPpQqRrSsTtUuVvWwXxYyZz0123456789:^_-!?*()[]<> " // Пробел нельзя
-	for _, char := range password {
-		if !strings.ContainsRune(availableSymbols, char) {
-			log.Println("Ошибка в пароле: Недопустимый символ -", char)
-			return "Пароль может состоять только из латинских букв, арабских цифр и символов :^_-!?*()[]<>", fmt.Errorf("Чо за пароль?")
-		}
-	}
-	// Длина
-	min_duration, err := strconv.Atoi(os.Getenv("PASSWORD_MIN_DURATION"))
-	if err != nil {
-		min_duration = 1
-	}
-	max_duration, err := strconv.Atoi(os.Getenv("PASSWORD_MAX_DURATION"))
-	if err != nil {
-		max_duration = 10
-	}
-	if len(password) < min_duration || len(password) > max_duration {
-		return fmt.Sprintf("Длина пароля должна быть в пределах от %d до %d символов",
-			min_duration, max_duration), err
-	}
-	// Совпадение пароля
-	if password != repeat_password {
-		return "Пароли не совпадают.", err
-	}
-	return "Пароль одобрен.", nil
-}
-func SendConfirmationEmail(email string, code string) error {
-	// Настройки SMTP
-	smtpServer := "smtp.mail.ru"
-	smtpPort := 465
-	from := os.Getenv("MAIL")
-	password := os.Getenv("MAIL_PASSWORD_OUTSIDE")
-
-	// Текст письма
-	subject := "Код подтверждения AlphavetLatter."
-	body := fmt.Sprintf(
-		"Здравствуйте!\n\nВаш код подтверждения: %s.\n\nИспользуйте его на сайте.", code)
-
-	// Создаём сообщение
-	m := gomail.NewMessage()
-	m.SetHeader("From", from)
-	m.SetHeader("To", email)
-	m.SetHeader("Subject", subject)
-	m.SetBody("text/plain", body)
-
-	// Настраиваем SMTP-клиент с TLS
-	d := gomail.NewDialer(smtpServer, smtpPort, from, password)
-	d.TLSConfig = &tls.Config{InsecureSkipVerify: true} // Безопасное подключение будет при false, но на localhost не робит
-
-	// Отправляем
-	err := d.DialAndSend(m)
-	log.Println("Результат ошибки отправки письма:", err)
-	return err
-}
-
-// CheckAuthHandler — проверяет возможность авто авторизации по loginToken
-func CheckAuthHandler(w http.ResponseWriter, r *http.Request) {
-	log.Println("Запрос на проверку возможности входа пользователя.")
-	// Добываем логин токен из заголовков
-	loginToken, err := GetTokenFromHeader(r.Header.Get("Authorization"))
-	if err != nil || loginToken == "" {
-		http.Error(w, "Это типа значит, что нет заголовка авторизации или токен некорректно передан", http.StatusUnauthorized)
+		WriteResponse(&w, &map[string]interface{}{
+			"message": "Запись регистрации не найдена.",
+		}, 401)
 		return
 	}
 
-	// Ищем пользователя по loginToken
-	userData, err := GetFromDatabaseByValue("Users", "loginToken", loginToken)
+	// Проверка времени регистрации
+	if IsExpired((*reg_data)["exp_time"].(int64)) {
+		// Удаляем запись и возвращаем ответ
+		log.Println("Время регистрации истекло.")
+		DeleteFromDatabase("Registrations", "state", state)
+		WriteResponse(&w, &map[string]interface{}{
+			"message": "Время регистрации истекло.",
+		}, 401)
+		return
+	}
+	// Добываем код
+	code, ok := (*requestData)["code"].(string)
+	if !ok {
+		WriteResponse(&w, &map[string]interface{}{
+			"message": "Код в запросе отсутствует.",
+		}, 400)
+		return
+	}
+	// Сверяем код
+	if code != (*reg_data)["code"].(string) {
+		WriteResponse(&w, &map[string]interface{}{
+			"message": "Неверный код.",
+		}, 409)
+		return
+	}
+	log.Println("Коды совпадают.")
+
+	// Регистрирует пользователя в БД
+	DeleteFromDatabase("Registrations", "state", state)
+	_, err = InsertUserToDatabase(&primitive.M{
+		"status":     "LogoutedGlobal",
+		"nickname":   (*reg_data)["nickname"].(string),
+		"last_name":  (*reg_data)["last_name"].(string),
+		"first_name": (*reg_data)["first_name"].(string),
+		"patronimyc": (*reg_data)["patronimyc"].(string),
+		"email":      (*reg_data)["email"].(string),
+		"password":   (*reg_data)["password"].(string),
+	})
+	if err != nil {
+		WriteResponse(&w, &map[string]interface{}{
+			"message": "Не удалось зарегистрировать пользователя.",
+		}, 500)
+		return
+	}
+	// И возвращает успех вместе с параметрами для входа
+	WriteResponse(&w, &map[string]interface{}{
+		"message": "Регистрация успешна.",
+	}, 200)
+}
+
+// Проверяет возможность авто авторизации по login_token
+func CheckAuthHandler(w http.ResponseWriter, r *http.Request) {
+	log.Println("Запрос на проверку возможности входа пользователя.")
+	// Добываем логин токен из заголовков
+	login_token, err := GetTokenFromHeader(r.Header.Get("Authorization"))
+	if err != nil || login_token == "" {
+		WriteResponse(&w, &map[string]interface{}{
+			"message": "Это типа значит, что нет заголовка авторизации или токен некорректно передан.",
+		}, 400)
+		return
+	}
+
+	// Ищем пользователя по login_token
+	userData, err := GetFromDatabaseByValue("Users", "login_token", login_token)
 	// Проверяем на успех поиска. (Можно укоротить, но не стал, т.к. мб сделаю проверку на истечение логинтокена)
 	if err != nil {
 		log.Println("Запрос отклонён.")
 		// Пользователь не найден или ошибка
 		WriteResponse(&w, &map[string]interface{}{
-			"message":    "Пользователь не найден.",
-			"loginToken": loginToken,
+			"message":     "Пользователь не найден.",
+			"login_token": login_token,
 		}, 404)
 		return
 	} else {
 		log.Println("Запрос одобрен.")
 		// Пользователь найден, не ошибка
 		WriteResponse(&w, &map[string]interface{}{
-			"message":    "Пользователь найден.",
-			"loginToken": loginToken,
-			"name":       (*userData)["name"],
+			"message":     "Пользователь найден.",
+			"login_token": login_token,
+			"nickname":    (*userData)["nickname"],
 		}, 200)
 	}
 }
 
-// ConfirmAuthHandler - Подтверждает авторизацию по loginToken.
+// ConfirmAuthHandler - Подтверждает авторизацию по login_token.
 // (По сути, копия CheckAuth, но с отличиями - удаляет токен с БД и отправляет данные)
 func ConfirmAuthHandler(w http.ResponseWriter, r *http.Request) {
 	log.Println("Запрос на подтверждение входа и выдачу параметров.")
 	// Добываем логин токен из заголовков
-	loginToken, err := GetTokenFromHeader(r.Header.Get("Authorization"))
-	if err != nil || loginToken == "" {
-		http.Error(w, "Это типа значит, что нет заголовка авторизации или токен некорректно передан", http.StatusUnauthorized)
+	login_token, err := GetTokenFromHeader(r.Header.Get("Authorization"))
+	if err != nil || login_token == "" {
+		WriteResponse(&w, &map[string]interface{}{
+			"message": "Это типа значит, что нет заголовка авторизации или токен некорректно передан.",
+		}, 400)
 		return
 	}
 
-	// Ищем пользователя по loginToken
-	userData, err := GetFromDatabaseByValue("Users", "loginToken", loginToken)
+	// Ищем пользователя по login_token
+	userData, err := GetFromDatabaseByValue("Users", "login_token", login_token)
 	// Проверяем на успех поиска. (Можно укоротить, но не стал, т.к. мб сделаю проверку на истечение логинтокена)
 	// + Если на конфирм перешли, то, скорее всего, запись есть, но, всё же, не помешает
 	if err != nil {
 		log.Println("Запрос отклонён.")
 		// Пользователь не найден или ошибка
 		WriteResponse(&w, &map[string]interface{}{
-			"message":    "Пользователь не найден.",
-			"loginToken": loginToken,
+			"message":     "Пользователь не найден.",
+			"login_token": login_token,
 		}, 404)
 		return
 	} else {
 		// Указывает, что пользователь не сможет подтвердить вход без авторизации
-		(*userData)["loginToken"] = ""
+		(*userData)["login_token"] = ""
 
 		// Получить последний добавленный токен обновления
-		var refreshToken string = ""
-		if refreshTokensSlice, ok := (*userData)["refreshTokens"].([]interface{}); ok && len(refreshTokensSlice) > 0 {
-			refreshToken = refreshTokensSlice[len(refreshTokensSlice)-1].(string)
+		var refresh_token string = ""
+		if refresh_tokens_slice, ok := (*userData)["refresh_tokens"].(primitive.A); ok && len(refresh_tokens_slice) > 0 {
+			refresh_token = refresh_tokens_slice[len(refresh_tokens_slice)-1].(string)
 			(*userData)["status"] = "Authorized" // Пользователь считается авторизованным до конца
 		} else {
 			(*userData)["status"] = "LogoutedGlobal" // Пользователь считается авторизованным до конца
@@ -822,50 +874,53 @@ func ConfirmAuthHandler(w http.ResponseWriter, r *http.Request) {
 			log.Println("Запрос на подтверждение входа отклонён из-за ошибки обновления статуса.")
 			// Пользователь не обновлён
 			WriteResponse(&w, &map[string]interface{}{
-				"message":    "Пользователь не обновлён.",
-				"loginToken": loginToken,
+				"message":     "Пользователь не обновлён.",
+				"login_token": login_token,
 			}, 500)
 			return
 		}
 
 		// Если не удалось получить токен ранее, габелла
-		if refreshToken == "" {
+		if refresh_token == "" {
 			log.Println("Запрос на подтверждение входа отклонён из-за отсутствия токена обновления.")
 			// Пользователь не обновлён
 			WriteResponse(&w, &map[string]interface{}{
-				"message":    "Токен обновления утерян или не был присвоен.",
-				"loginToken": loginToken,
+				"message":     "Токен обновления утерян или не был присвоен.",
+				"login_token": login_token,
 			}, 401)
 			return
 		}
 
 		log.Println("Возвращение подтверждения.")
 		// И вернуть
-		log.Println("Вход одобрен для имени", (*userData)["name"].(string))
+		log.Println("Вход одобрен для имени", (*userData)["nickname"].(string))
 		WriteResponse(&w, &map[string]interface{}{
-			"message":    "Вход одобрен.",
-			"loginToken": loginToken,
+			"message":     "Вход одобрен.",
+			"login_token": login_token,
 
-			"id":           (*userData)["id"].(string),
-			"email":        (*userData)["email"].(string),
-			"name":         (*userData)["name"].(string),
-			"accessToken":  (*userData)["accessToken"].(string),
-			"refreshToken": refreshToken,
+			"id":            (*userData)["id"].(string),
+			"email":         (*userData)["email"].(string),
+			"nickname":      (*userData)["nickname"].(string),
+			"roles":         (*userData)["roles"].(primitive.A),
+			"access_token":  (*userData)["access_token"].(string),
+			"refresh_token": refresh_token,
 		}, 200)
 	}
 }
 
-// UpdateAuthHandler - Обработчик для получения данных при наличии токена доступа
-func UpdateAuthHandler(w http.ResponseWriter, r *http.Request) {
+// Обработчик для получения данных при наличии токена доступа
+func GetSubHandler(w http.ResponseWriter, r *http.Request) {
 	log.Println("Получен запрос на обновление данных.")
 	// Добываем токен из заголовков
-	accessToken, err := GetTokenFromHeader(r.Header.Get("Authorization"))
-	if err != nil || accessToken == "" {
-		http.Error(w, "Отсутствует accessToken", http.StatusUnauthorized)
+	access_token, err := GetTokenFromHeader(r.Header.Get("Authorization"))
+	if err != nil || access_token == "" {
+		WriteResponse(&w, &map[string]interface{}{
+			"message": "Отсутствует токен.",
+		}, 400)
 		return
 	}
 
-	userData, err := GetFromDatabaseByValue("Users", "accessToken", accessToken)
+	userData, err := GetFromDatabaseByValue("Users", "access_token", access_token)
 	if err != nil {
 		// Обработка отсутствия пользователя
 		log.Println("Запрос на обновление данных провален. Пользователь не обнаружен.")
@@ -875,7 +930,7 @@ func UpdateAuthHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if IsOwnTokenExpired(accessToken) {
+	if IsOwnTokenExpired(access_token) {
 		log.Println("Запрос на обновление данных провален на этапе проверки актальности токена.")
 		WriteResponse(&w, &map[string]interface{}{
 			"message": "Токен недействителен.",
@@ -886,9 +941,10 @@ func UpdateAuthHandler(w http.ResponseWriter, r *http.Request) {
 	log.Println("Запрос на обновление данных успешно завершён.")
 	// Отправить результат обновления
 	WriteResponse(&w, &map[string]interface{}{
-		"id":    (*userData)["id"].(string),
-		"name":  (*userData)["name"].(string),
-		"email": (*userData)["email"].(string),
+		"id":       (*userData)["id"].(string),
+		"nickname": (*userData)["nickname"].(string),
+		"email":    (*userData)["email"].(string),
+		"roles":    (*userData)["roles"].(primitive.A),
 	}, 200)
 }
 
@@ -896,12 +952,14 @@ func UpdateAuthHandler(w http.ResponseWriter, r *http.Request) {
 func RefreshAccessHandler(w http.ResponseWriter, r *http.Request) {
 	log.Println("Получен запрос на обновление токенов.")
 	// Добываем рефреш токен из заголовков
-	refreshToken, err := GetTokenFromHeader(r.Header.Get("Authorization"))
-	if err != nil || refreshToken == "" {
-		http.Error(w, "Отсутствует refreshToken", http.StatusUnauthorized)
+	refresh_token, err := GetTokenFromHeader(r.Header.Get("Authorization"))
+	if err != nil || refresh_token == "" {
+		WriteResponse(&w, &map[string]interface{}{
+			"message": "Токен не передан.",
+		}, 400)
 		return
 	}
-	userData, err := GetFromDatabaseByValue("Users", "refreshToken", refreshToken)
+	userData, err := GetFromDatabaseByValue("Users", "refresh_tokens", refresh_token)
 	if err != nil {
 		// Обработка отсутствия пользователя
 		log.Println("Запрос на обновление токенов провален. Пользователь не обнаружен.")
@@ -910,50 +968,60 @@ func RefreshAccessHandler(w http.ResponseWriter, r *http.Request) {
 		}, 404)
 		return
 	}
-	if IsOwnTokenExpired(refreshToken) {
+	if IsOwnTokenExpired(refresh_token) {
 		log.Println("Запрос на обновление токенов провален на этапе проверки актальности токена.")
 		WriteResponse(&w, &map[string]interface{}{
 			"message": "Токен недействителен.",
 		}, 401)
 		return
 	}
-
+	
 	// Создаёт токены
-	newAccessToken := GenerateNewAccessToken((*userData)["email"].(string),
-		(*userData)["roles"].([]string), (*userData)["permissons"].([]string))
-	newRefreshToken := GenerateNewRefreshToken((*userData)["email"].(string))
+	roles := (*userData)["roles"].(primitive.A)
+	new_access_token := GenerateNewAccessToken((*userData)["id"].(string), roles, GenerateBasePermissionsListForRoles(roles))
+	new_refresh_token := GenerateNewRefreshToken((*userData)["id"].(string))
 
 	// Заменяет новым токеном обновления старый
-	refreshTokensSlice := (*userData)["refreshTokens"].([]interface{})
-	for i := 0; i < len(refreshTokensSlice); i++ {
-		if refreshTokensSlice[i].(string) == refreshToken {
-			refreshTokensSlice[i] = newRefreshToken
-			(*userData)["refreshTokens"] = refreshTokensSlice
+	refresh_tokens_slice := (*userData)["refresh_tokens"].(primitive.A)
+	for i := 0; i < len(refresh_tokens_slice); i++ {
+		if refresh_tokens_slice[i].(string) == refresh_token {
+			refresh_tokens_slice[i] = new_refresh_token
+			(*userData)["refresh_tokens"] = refresh_tokens_slice
 			break
 		}
 	}
 	// Обновляем токен доступа
-	(*userData)["accessToken"] = newAccessToken
+	(*userData)["access_token"] = new_access_token
+	// Перезаписывает
+	err = ReplaceFullUserInDatabase((*userData)["id"].(string), userData)
+	if err != nil {
+		fmt.Println("Пользователь найден, но обновление не осуществлёно.")
+		WriteResponse(&w, &map[string]interface{}{
+			"message": "Ошибка обновления.",
+		}, 500)
+	}
 
 	log.Println("Запрос на обновление токенов успешно завершён.")
 	// Отправить результат обновления
 	WriteResponse(&w, &map[string]interface{}{
-		"accessToken":  newAccessToken,
-		"refreshToken": newRefreshToken,
+		"access_token":  new_access_token,
+		"refresh_token": new_refresh_token,
 	}, 200)
 }
 
-// LogoutAllHandler - Обработчик выхода со всех устройств
+// Обработчик выхода со всех устройств
 func LogoutAllHandler(w http.ResponseWriter, r *http.Request) {
-	// Добываем рефреш токен из заголовков
-	accessToken, err := GetTokenFromHeader(r.Header.Get("Authorization"))
-	if err != nil || accessToken == "" {
-		http.Error(w, "Отсутствует accessToken", http.StatusUnauthorized)
+	// Добываем токен из заголовков
+	access_token, err := GetTokenFromHeader(r.Header.Get("Authorization"))
+	if err != nil || access_token == "" {
+		WriteResponse(&w, &map[string]interface{}{
+			"message": "Токен не передан.",
+		}, 400)
 		return
 	}
 
-	// Ищем пользователя по accessToken
-	userData, err := GetFromDatabaseByValue("Users", "accessToken", accessToken)
+	// Ищем пользователя по access_token
+	userData, err := GetFromDatabaseByValue("Users", "access_token", access_token)
 	if err != nil {
 		fmt.Println("Пользователь не найден, выход не осуществлён.")
 		WriteResponse(&w, &map[string]interface{}{
@@ -961,8 +1029,8 @@ func LogoutAllHandler(w http.ResponseWriter, r *http.Request) {
 		}, 404)
 		return
 	}
-	(*userData)["accessToken"] = ""
-	(*userData)["refreshTokens"] = []interface{}{}
+	(*userData)["access_token"] = ""
+	(*userData)["refresh_tokens"] = []interface{}{}
 	(*userData)["status"] = "LogoutedGlobal"
 	err = ReplaceFullUserInDatabase((*userData)["id"].(string), userData)
 	if err != nil {
@@ -971,11 +1039,294 @@ func LogoutAllHandler(w http.ResponseWriter, r *http.Request) {
 			"message": "Ошибка выхода.",
 		}, 500)
 	}
+	// Успех
+	WriteResponse(&w, &map[string]interface{}{
+		"message": "Успешный выход.",
+	}, 200)
+}
+
+// Кикает пользователя
+func LogoutUserHandler(w http.ResponseWriter, r *http.Request) {
+	fmt.Println("Запрос на кик пользователя.")
+	// Добываем токен из заголовков
+	access_token, err := GetTokenFromHeader(r.Header.Get("Authorization"))
+	if err != nil || access_token == "" {
+		WriteResponse(&w, &map[string]interface{}{
+			"message": "Токен не передан.",
+		}, 400)
+		return
+	}
+	// Получаем данные тела
+	requestData, err := GetDataFromBody(&r.Body)
+	if err != nil {
+		WriteResponse(&w, &map[string]interface{}{
+			"message": "Чота не получилось прочитать тело запроса.",
+		}, 400)
+		return
+	}
+	// Ищем пользователя по id
+	userData, err := GetFromDatabaseByValue("Users", "id", (*requestData)["id"].(string))
+	if err != nil {
+		fmt.Println("Пользователь не найден, выход не осуществлён.")
+		WriteResponse(&w, &map[string]interface{}{
+			"message": "Пользователь не найден.",
+		}, 404)
+		return
+	}
+	// Парсит токен
+	claims, err := ParseToken(access_token)
+	if err != nil {
+		fmt.Println("Токен не действителен.")
+		WriteResponse(&w, &map[string]interface{}{
+			"message": "Токен не действителен.",
+		}, 401)
+		return
+	}
+	// Проверяет возможность кика пользователя у токена (либо сам себя, либо нужно разрешение на блокировку)
+	if (*requestData)["user_id"].(string) != (*claims)["sub"].(string) {
+		permissionsSlice := (*claims)["permissions"].(primitive.A)
+		has_permission := false
+		for i := 0; i < len(permissionsSlice); i++ {
+			if permissionsSlice[i].(string) == "user:block" {
+				has_permission = true
+				break
+			}
+		}
+		if !has_permission {
+			fmt.Println("Недостаточно прав для кика.")
+			WriteResponse(&w, &map[string]interface{}{
+				"message": "Недостаточно прав для кика пользователя.",
+			}, 403)
+			return
+
+		}
+	}
+
+	(*userData)["access_token"] = ""
+	(*userData)["refresh_tokens"] = []interface{}{}
+	(*userData)["status"] = "LogoutedGlobal"
+	err = ReplaceFullUserInDatabase((*userData)["id"].(string), userData)
+	if err != nil {
+		fmt.Println("Пользователь найден, но выход не осуществлён.")
+		WriteResponse(&w, &map[string]interface{}{
+			"message": "Ошибка выхода.",
+		}, 500)
+	}
+	// Успех
+	fmt.Println("Запрос на кик пользователя одобрен. Пользователя выкинуло на...")
+	WriteResponse(&w, &map[string]interface{}{
+		"message": "Пользователь разлогинен.",
+	}, 200)
+}
+
+// Обработчик изменения параметров
+func UserDataChangeHandler(w http.ResponseWriter, r *http.Request) {
+	log.Println("Получен запрос на изменение данных.")
+	// Добываем токен из заголовка
+	access_token, err := GetTokenFromHeader(r.Header.Get("Authorization"))
+	if err != nil || access_token == "" {
+		http.Error(w, "Отсутствует access_token", http.StatusUnauthorized)
+		return
+	}
+	// Парсит токен и проверяет актуальность
+	claims, err := ParseToken(access_token)
+	if err != nil || IsOwnTokenClaimsExpired(claims) {
+		fmt.Println("Токен не действителен.")
+		WriteResponse(&w, &map[string]interface{}{
+			"message": "Токен не действителен.",
+		}, 401)
+		return
+	}
+	// Получаем новые данные
+	requestData, err := GetDataFromBody(&r.Body)
+	if err != nil {
+		WriteResponse(&w, &map[string]interface{}{
+			"message": "Чота не получилось прочитать тело запроса.",
+		}, 400)
+		return
+	}
+	// Получаем айди пользователя, которому меняем данные (если нету, меняет себе)
+	token_user_id := (*claims)["sub"].(string)
+	var target_user_id string
+	if request_id, ok := (*requestData)["user_id"]; ok {
+		target_user_id = request_id.(string)
+	} else {
+		target_user_id = token_user_id
+	}
+	// Получаем запись пользователя по айди
+	userData, err := GetFromDatabaseByValue("Users", "id", target_user_id)
+	if err != nil {
+		// Обработка отсутствия пользователя
+		log.Println("Запрос на обновление данных провален. Пользователь не обнаружен.")
+		WriteResponse(&w, &map[string]interface{}{
+			"message": "Пользователь не найден.",
+		}, 404)
+		return
+	}
+	// Меняем данные в записи
+	// Имя
+	if first_name, ok := (*requestData)["first_name"]; ok {
+		// Проверка доступности действия по правам
+		if target_user_id != token_user_id {
+			log.Println("Нельзя менять данные об имени другого пользователя.")
+			WriteResponse(&w, &map[string]interface{}{
+				"message": "Нельзя менять данные об имени другого пользователя.",
+			}, 403)
+			return
+		}
+		// Проверка доступности действия по настройкам
+		message, err := CheckName(first_name.(string), true)
+		if err != nil {
+			log.Println(message)
+			WriteResponse(&w, &map[string]interface{}{
+				"message": message,
+			}, 406)
+			return
+		}
+		(*userData)["first_name"] = first_name
+	}
+	// Фамилия
+	if last_name, ok := (*requestData)["last_name"]; ok {
+		// Проверка доступности действия по правам
+		if target_user_id != token_user_id {
+			log.Println("Нельзя менять данные об имени другого пользователя.")
+			WriteResponse(&w, &map[string]interface{}{
+				"message": "Нельзя менять данные об имени другого пользователя.",
+			}, 403)
+			return
+		}
+		// Проверка доступности действия по настройкам
+		message, err := CheckName(last_name.(string), true)
+		if err != nil {
+			log.Println(message)
+			WriteResponse(&w, &map[string]interface{}{
+				"message": message,
+			}, 406)
+			return
+		}
+		(*userData)["last_name"] = last_name
+	}
+	// Отчество
+	if patronimyc, ok := (*requestData)["patronimyc"]; ok {
+		// Проверка доступности действия по правам
+		if target_user_id != token_user_id {
+			log.Println("Нельзя менять данные об имени другого пользователя.")
+			WriteResponse(&w, &map[string]interface{}{
+				"message": "Нельзя менять данные об имени другого пользователя.",
+			}, 403)
+			return
+		}
+		// Проверка доступности действия по настройкам
+		message, err := CheckName(patronimyc.(string), true)
+		if err != nil {
+			log.Println(message)
+			WriteResponse(&w, &map[string]interface{}{
+				"message": message,
+			}, 406)
+			return
+		}
+		(*userData)["patronimyc"] = patronimyc
+	}
+	// Пароль
+	if password, ok := (*requestData)["password"]; ok {
+		// Проверка доступности действия по правам
+		if target_user_id != token_user_id {
+			log.Println("Нельзя менять данные о пароле другого пользователя.")
+			WriteResponse(&w, &map[string]interface{}{
+				"message": "Нельзя менять данные о пароле другого пользователя.",
+			}, 403)
+			return
+		}
+		// Проверка доступности действия по настройкам
+		message, err := CheckPassword(password.(string))
+		if err != nil {
+			log.Println(message)
+			WriteResponse(&w, &map[string]interface{}{
+				"message": message,
+			}, 406)
+			return
+		}
+		(*userData)["password"] = password
+	}
+	// Роли
+	if roles, ok := (*requestData)["roles"]; ok {
+		// Проверка доступности действия по правам
+		permissionsSlice := (*claims)["permissions"].(primitive.A)
+		has_roles_write_permission := false
+		for i := 0; i < len(permissionsSlice); i++ {
+			if permissionsSlice[i].(string) == "user:roles:write" {
+				has_roles_write_permission = true
+				break
+			}
+		}
+		if !has_roles_write_permission {
+			log.Println("Нет права на изменение ролей.")
+			WriteResponse(&w, &map[string]interface{}{
+				"message": "Нет права на изменение ролей.",
+			}, 403)
+			return
+		}
+		// Проверка доступности действия по настройкам
+		var err error
+		rolesSlice := (*requestData)["roles"].(primitive.A)
+		for i := 0; i < len(rolesSlice); i++ {
+			if rolesSlice[i].(string) != "Student" && rolesSlice[i].(string) != "Teacher" && rolesSlice[i].(string) != "Admin" {
+				err = fmt.Errorf("Одна или более ролей не существует(ют)")
+				break
+			}
+		}
+		if err != nil {
+			log.Println("Одна или более ролей не существует(ют)")
+			WriteResponse(&w, &map[string]interface{}{
+				"message": "Одна или более ролей не существует(ют)",
+			}, 406)
+			return
+		}
+		// Ставит роли и удаляет токен доступа, чтобы потребовать создать новый для обновления его прав
+		(*userData)["roles"] = roles
+		(*userData)["access_token"] = "Deleted after roles updated."
+	}
+
+	// Обновляем запись
+	err = ReplaceFullUserInDatabase((*userData)["id"].(string), userData) // Заменит старые данные
+	if err != nil {
+		log.Println("Запрос на изменение данных отклонён из-за ошибки обновления обновления.")
+		// Пользователь не обновлён
+		WriteResponse(&w, &map[string]interface{}{
+			"message": "Пользователь не обновлён.",
+		}, 500)
+		return
+	}
+	// Успех
+	WriteResponse(&w, &map[string]interface{}{
+		"message": "Данные обновлены.",
+	}, 200)
+}
+
+// Получает статус пользователя на сервере (Оффлай, онлайн, заблокирован)
+func GetUserServerStatus(user string) (string, error, string) {
+	statusResponse, err := DoGetRequestToService(os.Getenv("TEST_MODULE_URL")+"/users/data?user_id="+user+"&filter=status",
+		"Bearer", GenerateNewAdminToken())
+	defer statusResponse.Body.Close()
+	if err != nil {
+		return "", err, "Не удалось подключиться к серверу"
+	}
+	// Получаем данные из запроса
+	data, err := GetDataFromDefaultResponseBody(statusResponse.Body)
+	if err != nil {
+		return "", err, "Не удалось обработать данные с сервера"
+	}
+	// Проверяем статус ответа
+	if statusResponse.StatusCode != 200 {
+		return "", fmt.Errorf("Ответ не получен."), (*data)["message"].(string)
+	}
+	// Отправляем полученный статус
+	return (*data)["status"].(string), nil, "Успешное получение статуса"
 }
 
 // Система для получения данных с посторонних серверов
 // Отправляем Get запрос с токеном на указанный url
-func DoGetRequestToService(url string, tokenPrefix string, accessToken string) (*http.Response, error) {
+func DoGetRequestToService(url string, token_prefix string, access_token string) (*http.Response, error) {
 	// Создаём HTTP‑клиент с таймаутом
 	client := &http.Client{
 		Timeout: 10 * time.Second,
@@ -988,7 +1339,9 @@ func DoGetRequestToService(url string, tokenPrefix string, accessToken string) (
 	// Добавляем заголовок Authorization
 	// Для большинства сервисов: "Bearer <TOKEN>"
 	// Для GitHub: "token <TOKEN>"
-	req.Header.Set("Authorization", tokenPrefix+" "+accessToken)
+	req.Header.Set("Authorization", token_prefix+" "+access_token)
+	// Устанавливаем Content-Type
+	req.Header.Set("Content-Type", "application/json; charset=utf-8")
 	req.Header.Set("Accept", "application/json")
 
 	// Выполняем запрос
@@ -996,7 +1349,51 @@ func DoGetRequestToService(url string, tokenPrefix string, accessToken string) (
 	if err != nil {
 		return nil, fmt.Errorf("Ошибка выполнения запроса: %w", err)
 	}
+
 	// defer resp.Body.Close() не здесь
+	return resp, nil
+}
+
+// Post
+func DoPostRequestToService(url string, token_prefix string, access_token string, data *map[string]interface{}) (*http.Response, error) {
+	// Создаём HTTP‑клиент с таймаутом
+	client := &http.Client{
+		Timeout: 10 * time.Second,
+	}
+	// Создаём json и тело запроса
+	data_json, err := json.Marshal(*data)
+	if err != nil {
+		log.Printf("Ошибка сериализации JSON: %v", err)
+		return nil, err
+	}
+	body := bytes.NewReader(data_json)
+	// Формируем запрос
+	req, err := http.NewRequest("POST", url, body)
+	if err != nil {
+		return nil, fmt.Errorf("ошибка создания запроса: %w", err)
+	}
+
+	// Добавляем заголовок Authorization
+	// Для большинства сервисов: "Bearer <TOKEN>"
+	// Для GitHub: "token <TOKEN>"
+	req.Header.Set("Authorization", token_prefix+" "+access_token)
+
+	// Устанавливаем Content-Type
+	req.Header.Set("Content-Type", "application/json; charset=utf-8")
+
+	// Дополнительно: Accept для JSON‑ответов
+	req.Header.Set("Accept", "application/json")
+
+	// Выполняем запрос
+	log.Println("Выполняем Post запрос на", url, "с токеном", access_token)
+	resp, err := client.Do(req)
+	if err != nil {
+		log.Println("Не получилось выполнить запрос.")
+		return nil, fmt.Errorf("Ошибка выполнения запроса: %w", err)
+	}
+
+	log.Println("Запрос выполнен успешно.")
+	// defer resp.Body.Close() не здесь — вызывается на стороне потребителя
 	return resp, nil
 }
 
@@ -1019,20 +1416,20 @@ func GetDataFromArrayResponseBody(response io.ReadCloser) (*[]map[string]interfa
 }
 
 // Отправляет GET‑запрос с access_token
-func GetUserDataFromService(accessToken string, serviceType string) (*map[string]interface{}, error) {
+func GetUserDataFromService(access_token string, service_type string) (*map[string]interface{}, error) {
 	// Выбираем префикс для токена в заголовке
-	var tokenPrefix string
-	if serviceType == "github" {
-		tokenPrefix = "token"
+	var token_prefix string
+	if service_type == "github" {
+		token_prefix = "token"
 	} else {
-		tokenPrefix = "Bearer"
+		token_prefix = "Bearer"
 	}
 	// Получаем нужный юрл
-	url := GetServiceLoginURL(serviceType)
+	url := GetServiceLoginURL(service_type)
 	log.Println("Получение данных с клиента: 17%.")
 
 	// Делаем запрос, полчаем ответ
-	mainDataResponse, err := DoGetRequestToService(url, tokenPrefix, accessToken)
+	mainDataResponse, err := DoGetRequestToService(url, token_prefix, access_token)
 	// Проверяем статус
 	if mainDataResponse.StatusCode != http.StatusOK {
 		return nil, fmt.Errorf("Неуспешный статус: %d", mainDataResponse.StatusCode)
@@ -1047,11 +1444,11 @@ func GetUserDataFromService(accessToken string, serviceType string) (*map[string
 
 	log.Println("Получение данных с клиента: 76%.")
 	// Чебурда с получением емэила, если сервис - гит хаб, т.к. этот злыдень не хочет и email и логин возвращать нормально ВМЕСТЕ
-	if serviceType == "github" {
+	if service_type == "github" {
 		log.Println("ПОЛУЧЕНИЕ ДАННЫХ С GITHUB!")
 		log.Println("ДЕЛАЕМ ЗАПРОС НА /emails")
 		// Делаем запрос, полчаем ответ
-		emailsDataResponse, err := DoGetRequestToService(url+"/emails", tokenPrefix, accessToken)
+		emailsDataResponse, err := DoGetRequestToService(url+"/emails", token_prefix, access_token)
 		if err != nil {
 			return nil, fmt.Errorf("Ошибка декодирования: %v\n", err)
 		}
@@ -1095,10 +1492,10 @@ func GetUserDataFromService(accessToken string, serviceType string) (*map[string
 
 // Сортируют информацию пользователя сервисов, оставляя только нужное
 // имя, мэил, данные
-func SortServiceUserData(data *map[string]interface{}, serviceType string) *primitive.M {
+func SortServiceUserData(data *map[string]interface{}, service_type string) *primitive.M {
 	log.Println("Начало сортировки полученной информации.")
 	var result *primitive.M
-	switch serviceType {
+	switch service_type {
 	case "github":
 		// Email
 		var result_email string
@@ -1109,14 +1506,14 @@ func SortServiceUserData(data *map[string]interface{}, serviceType string) *prim
 		}
 		// Name
 		var result_name string
-		if name, ok := (*data)["name"]; ok && name != nil && len(name.(string)) > 0 {
+		if name, ok := (*data)["nickname"]; ok && name != nil && len(name.(string)) > 0 {
 			result_name = name.(string)
 		} else {
 			result_name = (*data)["login"].(string)
 		}
 		result = &primitive.M{
-			"name":  result_name,
-			"email": result_email,
+			"nickname": result_name,
+			"email":    result_email,
 		}
 	case "yandex":
 		// Email
@@ -1127,8 +1524,8 @@ func SortServiceUserData(data *map[string]interface{}, serviceType string) *prim
 			result_email = "Not linked"
 		}
 		result = &primitive.M{
-			"name":  (*data)["display_name"],
-			"email": result_email,
+			"nickname": (*data)["display_name"],
+			"email":    result_email,
 		}
 	default:
 		result = &primitive.M{}
@@ -1139,8 +1536,8 @@ func SortServiceUserData(data *map[string]interface{}, serviceType string) *prim
 }
 
 // Ссылки на ресурсы для получения данных по токену
-func GetServiceLoginURL(serviceType string) string {
-	switch serviceType {
+func GetServiceLoginURL(service_type string) string {
+	switch service_type {
 	case "github":
 		return "https://api.github.com/user"
 	case "yandex":
@@ -1151,9 +1548,9 @@ func GetServiceLoginURL(serviceType string) string {
 }
 
 // OAuth данные для запроса в виде config
-func CreateOAuthConfig(serviceType string) (*oauth2.Config, error) {
-	fmt.Println("Создание конфига: " + serviceType)
-	switch serviceType {
+func CreateOAuthConfig(service_type string) (*oauth2.Config, error) {
+	fmt.Println("Создание конфига: " + service_type)
+	switch service_type {
 	case "github":
 		return CreateGithubOAuthConfig(), nil
 	case "yandex":
@@ -1188,9 +1585,9 @@ func CreateYandexOAuthConfig() *oauth2.Config {
 }
 
 // OAuth данные для запроса в виде url
-func CreateUrlValues(serviceType string) (*url.Values, error) {
-	fmt.Println("Создание конфига: " + serviceType)
-	switch serviceType {
+func CreateUrlValues(service_type string) (*url.Values, error) {
+	fmt.Println("Создание конфига: " + service_type)
+	switch service_type {
 	case "github":
 		return CreateGithubUrlValues(), nil
 	case "yandex":
@@ -1228,8 +1625,144 @@ func GetTokenFromHeader(header string) (string, error) {
 	return parts[1], nil // Наш токен
 }
 
+// Получает данные из тела
+func GetDataFromBody(body *io.ReadCloser) (*map[string]interface{}, error) {
+	fmt.Println("Получение данных из тела запроса.")
+	var data map[string]interface{}
+	err := json.NewDecoder(*body).Decode(&data)
+	if err != nil {
+		return nil, err
+	}
+	fmt.Println("Получены данные в количестве: " + fmt.Sprint(len(data)))
+	return &data, nil
+}
+
+// Методы проверки титульной информации и пароля
+func CheckName(name string, real bool) (string, error) {
+	// Проверяем заполненность имени
+	if name == "" {
+		return "Никнейм и ФИО не можгут быть пустыми.", fmt.Errorf("Чо за имя?")
+	}
+	// Проверка начала и окончания имени
+	if name[0] == ' ' {
+		return "Никнейм и ФИО не можгут начинаться на пробел.", fmt.Errorf("Зачем...")
+	}
+	if name[len(name)-1] == ' ' {
+		return "Никнейм и ФИО не можгут оканчиваться на пробел.", fmt.Errorf("Зачем...")
+	}
+	// Отсутствие запрещённых символов
+	if real {
+		availableSymbols :=
+			"АаБбВвГгДдЕеЁёЖжЗзИиЙйКкЛлМмНнОоПпРрСсТтУуФфХхЦцЧчШшЩщЪъЫыЬьЭэЮюЯя-" // Пробел нельзя
+		for _, char := range name {
+			if !strings.ContainsRune(availableSymbols, char) {
+				log.Println("Ошибка в ФИО: Недопустимый символ -", char)
+				return "ФИО может состоять только из русских букв.", fmt.Errorf("Чо за имя?")
+			}
+		}
+	} else {
+		availableSymbols :=
+			"АаБбВвГгДдЕеЁёЖжЗзИиЙйКкЛлМмНнОоПпРрСсТтУуФфХхЦцЧчШшЩщЪъЫыЬьЭэЮюЯяAaBbCcDdEeFfGgHhIiJjKkLlMmNnOoPpQqRrSsTtUuVvWwXxYyZz0123456789:^_-!?*()[]<> " // Пробел можно
+		for _, char := range name {
+			if !strings.ContainsRune(availableSymbols, char) {
+				log.Println("Ошибка в никнейме: Недопустимый символ -", char)
+				return "Никнейм может состоять только из русских или латинских букв, арабских цифр, символов :^_-!?*()[]<> и пробелов.", fmt.Errorf("Чо за имя?")
+			}
+		}
+	}
+	// Длина
+	min_duration, err := strconv.Atoi(os.Getenv("NAME_MIN_DURATION"))
+	if err != nil {
+		min_duration = 1
+	}
+	max_duration, err := strconv.Atoi(os.Getenv("NAME_MAX_DURATION"))
+	if err != nil {
+		max_duration = 10
+	}
+	if len(name) < min_duration || len(name) > max_duration {
+		return fmt.Sprintf("Длина Никнейма и ФИО должна быть в пределах от %d до %d символов",
+			min_duration, max_duration), err
+	}
+	return "Имя одобрено.", nil
+}
+func CheckPasswordAndRepeat(password string, repeat_password string) (string, error) {
+	// Проверяем соответствие пароля требованиям
+	message, err := CheckPassword(password)
+	if err != nil {
+		return message, err
+	}
+	// Совпадение пароля
+	if password != repeat_password {
+		return "Пароли не совпадают.", fmt.Errorf("Пароли не совпадают.")
+	}
+	return "Пароль одобрен.", nil
+}
+func CheckPassword(password string) (string, error) {
+	// Проверяем заполненность основных полей
+	if password == "" {
+		return "Пароль не может быть пустым.", fmt.Errorf("Чо за пароль?")
+	}
+	// Отсутствие запрещённых символов
+	availableSymbols := "AaBbCcDdEeFfGgHhIiJjKkLlMmNnOoPpQqRrSsTtUuVvWwXxYyZz0123456789:^_-!?*()[]<> " // Пробел нельзя
+	for _, char := range password {
+		if !strings.ContainsRune(availableSymbols, char) {
+			log.Println("Ошибка в пароле: Недопустимый символ -", char)
+			return "Пароль может состоять только из латинских букв, арабских цифр и символов :^_-!?*()[]<>", fmt.Errorf("Чо за пароль?")
+		}
+	}
+	// Длина
+	min_duration, err := strconv.Atoi(os.Getenv("PASSWORD_MIN_DURATION"))
+	if err != nil {
+		min_duration = 1
+	}
+	max_duration, err := strconv.Atoi(os.Getenv("PASSWORD_MAX_DURATION"))
+	if err != nil {
+		max_duration = 10
+	}
+	if len(password) < min_duration || len(password) > max_duration {
+		return fmt.Sprintf("Длина пароля должна быть в пределах от %d до %d символов",
+			min_duration, max_duration), err
+	}
+	return "Пароль одобрен.", nil
+}
+
+// Отпрвка писем на почту
+func SendConfirmationEmail(email string, code string) error {
+	// Настройки SMTP
+	smtpServer := "smtp.mail.ru"
+	smtpPort := 465
+	from := os.Getenv("MAIL")
+	password := os.Getenv("MAIL_PASSWORD_OUTSIDE")
+
+	// Текст письма
+	subject := "Код подтверждения AlphavetLatter."
+	body := fmt.Sprintf(
+		"Здравствуйте!\n\nВаш код подтверждения: %s.\n\nИспользуйте его на сайте.", code)
+
+	// Создаём сообщение
+	m := gomail.NewMessage()
+	m.SetHeader("From", from)
+	m.SetHeader("To", email)
+	m.SetHeader("Subject", subject)
+	m.SetBody("text/plain", body)
+
+	// Настраиваем SMTP-клиент с TLS
+	d := gomail.NewDialer(smtpServer, smtpPort, from, password)
+	d.TLSConfig = &tls.Config{InsecureSkipVerify: true} // Безопасное подключение будет при false, но на localhost не робит
+
+	// Отправляем
+	err := d.DialAndSend(m)
+	log.Println("Результат ошибки отправки письма:", err)
+	return err
+}
+
 // Генерация кода подтверждения
 func GenerateCode(length int) string {
-	multip := 10 * (length - 1)
+	multip := int(math.Pow(10.0, float64((length-1))) + 0.5)
 	return fmt.Sprint(rand.New(rand.NewSource(time.Now().UnixNano())).Intn(9*multip) + multip)
+}
+
+// Генерация state
+func GenerateState() string {
+	return fmt.Sprintf("%x", time.Now().UnixNano())
 }

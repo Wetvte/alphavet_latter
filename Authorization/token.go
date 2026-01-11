@@ -1,51 +1,72 @@
 package main
 
 import (
+	"fmt"
 	"time"
 
 	"encoding/json"
 	"log"
 	"os"
-	"slices"
 	"strconv"
 
 	"github.com/golang-jwt/jwt/v5"
+
+	"go.mongodb.org/mongo-driver/bson/primitive"
 )
 
 // Генерирует базовые разрешения для роли
-func GenerateBasePermissionsListForRole(role string) []string {
+func GenerateBasePermissionsListForRole(role string) primitive.A {
 	switch role {
 	case "Student":
-		return []string{"user:roles:read", "user:disciplines:read", "user:tries:read", "user:fullname:write", "user:status:write",
+		return primitive.A{"user:roles:read", "user:disciplines:read", "user:tries:read", "user:fullname:write", "user:status:write",
 			"discipline:teacherslist", "discipline:testslist", "discipline:student:add", "discipline:user:remove",
 			"test:tries:read",
 			"tries/answer/change",
 			"news:write"}
 	case "Teacher":
-		return []string{"user:roles:read", "user:disciplines:read", "user:tries:read", "user:fullname:write", "user:status:write",
+		return primitive.A{"user:roles:read", "user:disciplines:read", "user:tries:read", "user:fullname:write", "user:status:write",
 			"discipline:teacherslist", "discipline:testslist", "discipline:studentslist", "discipline:create", "discipline:delete",
 			"discipline:text:write", "discipline:test:add", "discipline:teacher:add", "discipline:user:remove",
-			"test:create", "test:tries:read", "test:status:write", "test:question:add", "test:question:remove", "test:question:update",
+			"test:create", "test:text:write", "test:tries:read", "test:status:write", "test:question:add", "test:question:remove", "test:question:update",
 			"question:read", "question:create", "question:update", "question:delete",
 			"news:write"}
 	case "Admin":
-		return []string{"users:list", "user:roles:read", "user:disciplines:read", "user:tries:read", "user:fullname:write",
-			"user:roles:write", "user:status:write", "user:block",
+		return primitive.A{"users:note",
+			"users:list", "user:roles:read", "user:disciplines:read", "user:tries:read",
+			"user:fullname:write", "user:roles:write", "user:status:write", "user:block",
 			"discipline:teacherslist", "discipline:testslist", "discipline:studentslist", "discipline:create", "discipline:delete",
 			"discipline:teacher:add", "discipline:user:remove",
 			"test:tries:read", "test:status:write", "test:question:remove",
 			"questions:list", "question:read", "question:delete",
 			"news:write"}
 	default:
-		return []string{}
+		return primitive.A{}
 	}
+}
+func GenerateBasePermissionsListForRoles(roles primitive.A) primitive.A {
+	var result primitive.A
+	for _, role := range roles {
+		result = CombinePermissions(result, GenerateBasePermissionsListForRole(role.(string)))
+	}
+	return result;
 }
 
 // Убирает повторения
-func CombinePermissions(standart []string, additions []string) []string {
-	var result []string = standart
+func CombinePermissions(standart primitive.A, additions primitive.A) primitive.A {
+	result := standart
 	for _, permission := range additions {
-		if !slices.Contains(result, permission) {
+		// Флаг найденного совпадения
+		found := false
+
+		// Перебираем элементы result
+		for _, current := range result {
+			if current.(string) == permission.(string) {
+				found = true
+				break
+			}
+		}
+
+		if !found {
 			result = append(result, permission)
 		}
 	}
@@ -53,13 +74,13 @@ func CombinePermissions(standart []string, additions []string) []string {
 }
 
 // Генерирует новые токены для этого типо сервиса
-func GenerateNewAccessToken(sub string, roles []string, permissions []string) string {
+func GenerateNewAccessToken(sub string, roles primitive.A, permissions primitive.A) string {
 	token := jwt.NewWithClaims(jwt.SigningMethodHS256, jwt.MapClaims{
 		"sub":         sub,
 		"type":        "access",
 		"roles":       roles,
 		"permissions": permissions,
-		"exp":         time.Now().Add(time.Minute).Unix(), // 1 минута
+		"exp":         GetTimeFromNow(60), // 1 минута
 	})
 	result, err := token.SignedString([]byte(os.Getenv("OWN_TOKEN_GENERATE_KEY")))
 	if err != nil {
@@ -67,12 +88,11 @@ func GenerateNewAccessToken(sub string, roles []string, permissions []string) st
 	}
 	return result
 }
-
 func GenerateNewRefreshToken(sub string) string {
 	token := jwt.NewWithClaims(jwt.SigningMethodHS256, jwt.MapClaims{
 		"sub":  sub,
 		"type": "refresh",
-		"exp":  time.Now().Add(time.Hour * 24 * 7).Unix(), // 7 дней
+		"exp":  GetTimeFromNow(60 * 60 * 24 * 7), // 7 дней
 	})
 	result, err := token.SignedString([]byte(os.Getenv("OWN_TOKEN_GENERATE_KEY")))
 	if err != nil {
@@ -80,35 +100,14 @@ func GenerateNewRefreshToken(sub string) string {
 	}
 	return result
 }
-func GenerateNewRegistrationToken(sub string) string {
-	token := jwt.NewWithClaims(jwt.SigningMethodHS256, jwt.MapClaims{
-		"sub":  sub,
-		"type": "registration",
-		"exp":  time.Now().Add(time.Minute * 5).Unix(), // 5 минут
-	})
-	result, err := token.SignedString([]byte(os.Getenv("OWN_TOKEN_GENERATE_KEY")))
-	if err != nil {
-		result = ""
-	}
-	return result
-}
-func GenerateNewAuthorizationToken(sub string) string {
-	token := jwt.NewWithClaims(jwt.SigningMethodHS256, jwt.MapClaims{
-		"sub":  sub,
-		"type": "authorization",
-		"exp":  time.Now().Add(time.Minute * 5).Unix(), // 5 минут
-	})
-	result, err := token.SignedString([]byte(os.Getenv("OWN_TOKEN_GENERATE_KEY")))
-	if err != nil {
-		result = ""
-	}
-	return result
+func GenerateNewAdminToken() string {
+	return GenerateNewAccessToken("1", primitive.A{"Admin"}, GenerateBasePermissionsListForRole("Admin"))
 }
 
-// Проверяет, токен, созданный этим типо сервисом, исчез, или нет
-func IsOwnTokenExpired(token_string string) bool {
+// Парсит токен и возвращает claims
+func ParseToken(token_string string) (*jwt.MapClaims, error) {
 	var claims jwt.MapClaims
-	tokenParsed, parse_err := jwt.ParseWithClaims(token_string, &claims, func(token *jwt.Token) (interface{}, error) {
+	token_parsed, parse_err := jwt.ParseWithClaims(token_string, &claims, func(token *jwt.Token) (interface{}, error) {
 		_, success := token.Method.(*jwt.SigningMethodHMAC) // Если не схожи методы хэширования, сразу ошибка
 		if success {
 			return []byte(os.Getenv("OWN_TOKEN_GENERATE_KEY")), nil
@@ -116,13 +115,26 @@ func IsOwnTokenExpired(token_string string) bool {
 		log.Println("Токен ", token_string, " не подходит под дехэш.")
 		return nil, jwt.ErrInvalidKey
 	})
-	if parse_err != nil || !tokenParsed.Valid {
+	if parse_err != nil || !token_parsed.Valid {
+		log.Println("Токен", token_string, "недействителен.")
+		return nil, fmt.Errorf("Ошибка разбора или недействительный токен.")
+	}
+	return &claims, nil
+}
+
+// Проверяет, токен, созданный этим типо сервисом, исчез, или нет
+func IsOwnTokenExpired(token_string string) bool {
+	claims, err := ParseToken(token_string)
+	if err != nil {
 		log.Println("Токен", token_string, "недействителен.")
 		return true // ошибка разбора или недействительный токен
 	}
 
+	return IsOwnTokenClaimsExpired(claims)
+}
+func IsOwnTokenClaimsExpired(claims *jwt.MapClaims) bool {
 	var expTime int64
-	exp := claims["exp"]
+	exp := (*claims)["exp"]
 	switch t := exp.(type) {
 	case float64:
 		expTime = time.Unix(int64(t), 0).Unix()
@@ -148,7 +160,17 @@ func IsOwnTokenExpired(token_string string) bool {
 		expTime = 0
 	}
 
-	timeNow := time.Now().Unix()
-	log.Println("Токен ", token_string, " годен до", expTime, "а сейчас", timeNow)
-	return expTime < timeNow
+	return IsExpired(expTime)
+}
+
+// Проверяет, вышло ли время
+func IsExpired(end int64) bool {
+	current := time.Now().Unix()
+	log.Println("Время истечения:", end, "а сейчас", current)
+	return end < current
+}
+
+// Возвращает текущее время + секунды в unix
+func GetTimeFromNow(seconds int) int64 {
+	return time.Now().Add(time.Second * time.Duration(seconds)).Unix()
 }
