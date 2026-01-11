@@ -1,4 +1,4 @@
-﻿#ifndef CONFIG_LOADER
+#ifndef CONFIG_LOADER
 #define CONFIG_LOADER
 
 #include "../include/config_loader.h"
@@ -24,19 +24,17 @@ Config ConfigLoader::load(const std::string& filepath) {
         return config;  // Возвращаем пустой Config, если файл не открылся
     }
 
-    std::cout << "Файл env открыт." << std::endl;
-
     //  Проверка чтения конфига из файла
     std::string line;
     while (std::getline(file, line)) {
-        std::cout << "Получена строка из env: " << line << std::endl;
         std::string key, value;
         if (parse_line(line, key, value)) {
-            std::cout << "Разделена на: " << key << " и " << value << std::endl;
             config.values[key] = value;
         }
     }
     
+    std::cout << "Файл env успешно прочитан." << std::endl;
+
     file.close();
     return config;
 }

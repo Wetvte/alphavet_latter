@@ -3,8 +3,8 @@
 
 #include <string>
 #include <string_view>
-#include <json.hpp>
 #include <jwt-cpp/jwt.h>
+#include "json.hpp"
 
 // Вспомогательный класс для хранения загруженного токена
 struct Token {
@@ -13,6 +13,7 @@ public:
     std::string get_user() const;
     bool has_role(const std::string &permission) const;
     bool has_permission(const std::string &permission) const;
+    std::string get_as_string() const;
 
 private:
     std::string asstring;

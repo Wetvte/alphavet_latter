@@ -1,4 +1,4 @@
-﻿#ifndef API_SERVER_H
+#ifndef API_SERVER_H
 #define API_SERVER_H
 
 #include "httplib.h"
@@ -7,6 +7,12 @@
 #include "token_decoder.h"
 #include <tuple>
 #include <atomic>
+#include <optional>
+
+struct HttpResponse {
+    nlohmann::json body;
+    int status;
+};
 
 class APIServer {
 public:
@@ -28,9 +34,17 @@ private:
     Token get_request_token(const httplib::Request &req);
     Token get_header_token(const std::string &header);
     nlohmann::json get_body_json(const std::string &body);
+    nlohmann::json get_query_json(const std::string &query);
+    nlohmann::json get_params_json(const httplib::Params& params);
     void write_response(httplib::Response &res, const std::string &message, const int &status = 200);
     void write_response(httplib::Response &res, nlohmann::json json, const std::string &message, const int &status = 200);
     
+    // Собственные запросы
+    std::optional<HttpResponse> DoGetRequestToService(const std::string& host, const int& port, const std::string& source,
+        const std::string &token_prefix, const std::string &token);
+    std::optional<HttpResponse> DoPostRequestToService(const std::string& host, const int& port, const std::string& source,
+        const std::string &token_prefix, const std::string &token, const nlohmann::json& body);
+
     // Вспомогательные методы
     std::string build_fullname(const std::string& first_name="", const std::string& last_name="", const std::string& patronymic="");
     std::string build_range(const std::vector<std::string> &ids);

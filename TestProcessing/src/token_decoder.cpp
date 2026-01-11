@@ -1,4 +1,4 @@
-﻿#ifndef TOKEN
+#ifndef TOKEN
 #define TOKEN
 
 #include <iostream>
@@ -10,7 +10,7 @@ std::string Token::get_user() const {
 }
 bool Token::is_valid() const {
     if (!verified) return false;
-
+    // Время
     long expTime = payload_data["exp"].get<long>();
     long currentTime = static_cast<long>(std::chrono::system_clock::to_time_t(std::chrono::system_clock::now()));
     return expTime > currentTime;
@@ -35,10 +35,14 @@ bool Token::has_permission(const std::string &permission) const {
     }
     return false;
 }
+std::string Token::get_as_string() const {
+    return asstring;
+}
 
 Token TokenDecoder::decode(const std::string &token, const std::string &key) {
     Token result;
     
+    std::cout << "     ----- Пытаемся декодировать токен -----     " << std::endl;
     try {
         // Инициализируем токен
         if (!intit_token(token, result)) {
@@ -61,7 +65,7 @@ Token TokenDecoder::decode(const std::string &token, const std::string &key) {
         std::cout << "Токен валиден!" << std::endl;
     }
     catch (const std::exception& e) {
-        std::cout << e.what() << "\n";
+        std::cout << e.what() << std::endl;
     }
 
     return result;
@@ -97,7 +101,8 @@ bool TokenDecoder::low_level_decode_jwt(Token& token) {
         // Декодируем base64url
         token.decoded_header_part = base64url_decode(token.header_part);
         token.decoded_payload_part = base64url_decode(token.payload_part);
-
+        std::cout << "Декодирован header: " << token.decoded_header_part << std::endl;
+        std::cout << "Декодирован payload: " << token.decoded_payload_part << std::endl;
 
         // Парсим JSON с помощью nlohmann::json
         token.header_data = nlohmann::json::parse(token.decoded_header_part);

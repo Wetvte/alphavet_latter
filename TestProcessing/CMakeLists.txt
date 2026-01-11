@@ -1,4 +1,4 @@
-﻿cmake_minimum_required(VERSION 3.10)
+cmake_minimum_required(VERSION 3.10)
 
 # Указываем путь к глобальному vcpkg и подключаем его инструмент
 set(CMAKE_TOOLCHAIN_FILE
@@ -13,10 +13,8 @@ set(CMAKE_CXX_EXTENSIONS OFF)
 set(CMAKE_GENERATOR_PLATFORM x64)
 
 # Задаём кодировку для компилятора
-if(MSVC)
-    add_compile_options("/utf-8")
-    set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} /utf-8")
-endif()
+add_compile_options("/utf-8")
+set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} /utf-8")
 
 project(Latter)
 

@@ -1,4 +1,4 @@
-﻿#include "include/api_server.h"
+#include "include/api_server.h"
 #include <iostream>
 #include <clocale>
 #include <windows.h>
@@ -7,7 +7,6 @@
 int main() {
     // Общая локализация
     setlocale(LC_ALL, "Russian");
-    SetConsoleCP(CP_UTF8);
     SetConsoleOutputCP(CP_UTF8);
 
     APIServer server;
