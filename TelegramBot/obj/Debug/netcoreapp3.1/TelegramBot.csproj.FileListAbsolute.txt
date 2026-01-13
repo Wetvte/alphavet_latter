@@ -1,0 +1,5 @@
+C:\Users\Admin\Desktop\WetvteGitClone\alphavet_latter\TelegramBot\obj\Debug\netcoreapp3.1\TelegramBot.csprojAssemblyReference.cache
+C:\Users\Admin\Desktop\WetvteGitClone\alphavet_latter\TelegramBot\obj\Debug\netcoreapp3.1\TelegramBot.AssemblyInfoInputs.cache
+C:\Users\Admin\Desktop\WetvteGitClone\alphavet_latter\TelegramBot\obj\Debug\netcoreapp3.1\TelegramBot.AssemblyInfo.cs
+C:\Users\Admin\Desktop\WetvteGitClone\alphavet_latter\TelegramBot\obj\Debug\netcoreapp3.1\TelegramBot.csproj.CoreCompileInputs.cache
+C:\Users\Admin\Desktop\WetvteGitClone\alphavet_latter\TelegramBot\obj\Debug\netcoreapp3.1\TelegramBot.MvcApplicationPartsAssemblyInfo.cache
