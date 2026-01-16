@@ -67,7 +67,7 @@ function createNews(news_id, sender_id, sender_fullname, text) {
    <span class="news-content">${text}</span>
    <button class="news-delete">Удалить</button>`;
   // Ставит событие кнопке для удаления
-  item.querySelector(".news-delete").addEventListener("click", async () => {
+  newItem.querySelector(".news-delete").addEventListener("click", async () => {
     // Отправляет запрос на удаление новости
     const [delete_status, delete_response] = await post_to_webclient("data/write",
       { source: "news/status" },
@@ -218,6 +218,8 @@ document.addEventListener("DOMContentLoaded", async () => {
     }
     // Отправка успеха
     send_notification("success", target_status == "Blocked" ? "Пользователь заблокирован." : "Пользователь разблокирован.");
+    // Смена статуса и кнопки
+    set_status(target_status);
   });
 
   // Открытие/Закрытие секций
@@ -287,21 +289,21 @@ document.addEventListener("DOMContentLoaded", async () => {
     if (testsContainer.is_open == false) {
       // Получаем данные
       const [status, response] = await get_from_webclient("data/read",
-        { source: "users/data", user_id: load_data["user_id"], filter: "tries" });
+        { source: "users/data", user_id: load_data["user_id"], filter: "tests" });
       // Проверяем на ошибку
       if (status != 200 || !response) {
         send_notification("error", response["message"] ? response["message"] : "Ошибка при получении тестов пользователя.");
         return;
       }
-      // Возвращается: tries массив с try_id, test_id, test_discipline_id, test_title, test_discipline_title,
-      // test_status, test_discipline_status, status,           points, max_points, score_percent
+      // Возвращается: tests массив с test_id, test_discipline_id, test_title, test_discipline_title,
+      // test_status, test_discipline_status
 
       // Очищаем список дисциплин
       testsContainer.innerHTML = "";
       // Наполняем полученными из запроса
-      for (const tri of response["tries"]) {
+      for (const test of response["tests"]) {
         // Создаёт
-        const item = createTest(tri["test_id"], tri["test_title"], tri["test_discipline_id"], tri["test_discipline_title"]);
+        const item = createTest(test["test_id"], test["test_title"], test["test_discipline_id"], test["test_discipline_title"]);
         // Добавляет
         testsContainer.append(item);
       }

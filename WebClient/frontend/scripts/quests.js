@@ -1,4 +1,4 @@
-const web_server_url = "http://localhost:3000";
+const web_server_url = "http://localhost/web";
 
 // Для открытия страниц
 function open_ref(ref) {

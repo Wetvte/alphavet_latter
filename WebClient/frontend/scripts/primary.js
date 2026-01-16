@@ -13,35 +13,49 @@ function createUser(fullname, id) {
     return newItem;
 }
 // Создание итема вопроса
-function createQuestion(id, version, title, status) {
+function createQuestion(id, version, title, status, options, max_options) {
     const newItem = document.createElement("div");
+    newItem.classList = "section-item question"; 
+    let html =
+    `<div class="section-text question-signature">${id}.(${version})</div>
+    <div class="section-text question-title">${title}</div>
+    <div class="section-text">Кол-во ответов: ${max_options}</div>
+    <div class="section-group">
+        <div class="section-text">Ответы:</div>`;
+    options.forEach((option) => {
+        html += `<div class="section-text">${option}</div>`;
+    });
+    html +=
+    `</div>
+    <div class="section-group>
+        ${status == "Deleted" ? (
+            `<div class="section-text question-status deleted">Удалён</div>`
+        ) : (
+            `<div class="button delete">Удалить</div>`
+        )}
+    </div>`;
+    newItem.innerHTML = html;
+    // Ставим обработчик кнопке удаления
+    if (status != "Deleted") newItem.querySelector(".button.delete").addEventListener("click", async () => {
+        // Отправляет запрос
+        const [status, response] = await post_to_webclient("data/write",
+            { source: "questions/status" },
+            { question_id: id, question_version: version, status: "Deleted" });
 
-    let status_string;
-    let status_class;
-    switch (status) {
-        case "Activated":
-            status_string = "Активирован";
-            status_class = "activated";
-            break;
-        case "Deactivated":
-            status_string = "Активирован";
-            status_class = "deactivated";
-            break;
-        case "Deleted":
-            status_string = "Удалён";
-            status_class = "deleted";
-            break;
-        default:
-            status_string = "Неизвестный";
-            status_class = "unkwonn";
-            break;
-    }
-
-    newItem.classList = "section-item question";
-    newItem.innerHTML =
-        `<div class="section-text question-signature">${id}.(${version})</div>
-        <div class="section-text question-title">${title}</div>
-        <div class="section-text question-status ${status_class}">${status_string}</div>`;
+        // Если успешно
+        if (status == 200) {
+            // Сообщаем
+            send_notification("success", "Успешно удалён вопрос " + id);
+            // Меняем кнопку на текст
+            const button = newItem.querySelector(".button.delete");
+            button.classList = "section-text question-status deleted";
+            button.textContent = "Удалён";
+        }
+        // Если провал
+        else {
+            send_notification("error", response["message"] ? response["message"] : "Ошибка при добавлении вопроса.");
+        }
+    });
     return newItem;
 }
 // Создание итема добавления дисциплины
@@ -136,14 +150,15 @@ document.addEventListener("DOMContentLoaded", async () => {
                 send_notification("error", response["message"] ? response["message"] : "Ошибка при получении вопросов.");
                 return;
             }
-            // Возвращается: questions массив с question_id, question_version, title, status
+            // Возвращается: questions массив с question_id, question_version, title, status, options, max_options
 
             // Очищаем список 
             questionsContainer.innerHTML = "";
             // Наполняем полученными из запроса
             for (const question of response["questions"]) {
                 // Создаёт
-                const item = createQuestion(question["question_id"], question["question_version"], question["title"], question["status"]);
+                const item = createQuestion(question["question_id"], question["question_version"], question["title"], question["status"],
+                    question["options"], question["max_options"]);
                 // Добавляет
                 questionsContainer.append(item);
             }

@@ -39,11 +39,12 @@ function set_status(status) {
 // Создание
 // Вопросов
 // Редактируемые
-function createModifyQuestion(number, id, version, title, options, points, max_options) {
+function createModifyQuestion(number, id, version, title, options, points, max_options, author_id) {
     const newQuestion = document.createElement("div");
     newQuestion.classList = "question-item modify";
     newQuestion.question_id = id;
     newQuestion.question_version = version;
+    newQuestion.author_id = author_id;
     newQuestion.innerHTML =
             `<div class="question-modify-header">
                 <div class="question-modify-number">Вопрос ${number}.</div>
@@ -96,6 +97,15 @@ function createModifyQuestion(number, id, version, title, options, points, max_o
         // Спрашиваем
         const confirmDelete = confirm("Уверены, то хотите удалить вопрос?");
         if (!confirmDelete) return;
+        // Изменяем номера вопросов
+        const children = Array.from(dataContainer.children);
+        let number = 0;
+        children.forEach((question) => {
+            if (newQuestion != question) {
+                number++;
+                question.querySelector(".question-modify-number").textContent = `Вопрос ${number}.`;
+            }
+        });
         // Удаляем
         newQuestion.remove();
     });
@@ -225,8 +235,8 @@ function createSolveQuestion(number, answer_id, title, options, max_options) {
     deleteButton.addEventListener("click", async () => {
         // Отправляет запрос
         const [status, response] = await post_to_webclient("data/write",
-            { source: "tries/answer/delete" },
-            { answer_id: answer_id });
+            { source: "tries/answer/change" },
+            { answer_id: answer_id, options: [] });
         // Обрабатывает ошибку
         if (status != 200) {
             send_notification("error", response && response["message"] ?
@@ -325,6 +335,9 @@ document.addEventListener("DOMContentLoaded", async () => {
     testTitleText = document.getElementById("testTitleText");
     testDescText = document.getElementById("testDescText");
     testStatusText = document.getElementById("testStatusText");
+    const testTitleInput = document.getElementById("testTitleInput");
+    const testDescInput = document.getElementById("testDescInput");
+    
     const editInfoButton = document.getElementById("editInfoButton");
     const changeStatusButton = document.getElementById("changeStatusButton");
     const deleteTestButton = document.getElementById("deleteTestButton");
@@ -466,7 +479,7 @@ document.addEventListener("DOMContentLoaded", async () => {
             send_notification("error", response["message"] ? response["message"] : "Ошибка при получении вопросов.");
             return;
         }
-        // Возвращается: questions массив с question_id, question_version, title, options, points, max_options
+        // Возвращается: questions массив с question_id, question_version, title, options, points, max_options, author_id
         // А также has_tries
 
         if (response["has_tries"] === true || response["has_tries"] == 1) {
@@ -481,7 +494,7 @@ document.addEventListener("DOMContentLoaded", async () => {
             number++;
             // Создаёт и Добавляет
             const item = createModifyQuestion(number, question["question_id"], question["question_version"],
-                question["title"], question["options"], question["points"], question["max_options"]);
+                question["title"], question["options"], question["points"], question["max_options"], question["author_id"]);
             dataContainer.append(item);
         }
         // Уведомляет
@@ -584,14 +597,15 @@ document.addEventListener("DOMContentLoaded", async () => {
                     data["points"][i] = options[i].querySelector(".question-modify-input.option-points").value;
                 }
 
-                // Если айди, на который ссылается вопрос, указан
-                if (question.question_id && question.question_version) {
-                    console.log("Вопрос старый", question.question_id, question.question_version, ", отправляем запрос на обновление", data);
+                // Если айди, на который ссылается вопрос, указан и автор совпадает
+                if (question.question_id && question.question_version && question.author_id == load_data.viewer["id"]) {
+                    console.log("Вопрос старый и изменён автором", question.question_id, question.question_version, ", отправляем запрос на обновление", data);
                     // Отправляет запрос на обновление вопроса
                     const [status, response] = await post_to_webclient("data/write",
                         { source: "questions/update" },
                         { question_id: question.question_id, ...data });
-                    // Обрабатывает ошибку
+                    
+                    // Обрабатывает другую ошибку
                     if (status != 200) {
                         send_notification("error", response && response["message"] ?
                             response["message"] : "Не удалось сохранить тест.");
@@ -602,7 +616,7 @@ document.addEventListener("DOMContentLoaded", async () => {
                     console.log(response);
                 }
                 else {
-                    console.log("Вопрос новый, отправляем запрос на создание", data);
+                    console.log("Вопрос новый, либо изменён не своим автором, отправляем запрос на создание", data);
                     // Отправляет запрос на создание вопроса
                     const [status, response] = await post_to_webclient("data/write",
                         { source: "questions/create" },
