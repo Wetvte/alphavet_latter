@@ -81,23 +81,26 @@ void APIServer::shutdown() {
 }
 // Токены
 Token APIServer::get_request_token(const httplib::Request &req) {
+    std::cout << "Получаем токен с запроса" << std::endl;
     auto header_it = req.headers.find("Authorization");
     if (header_it == req.headers.end()) {
+        std::cout << "Заголовок не найден" << std::endl;
         return Token{}; // заголовок не найден
     }
     std::string auth_header = header_it->second;
     return get_header_token(auth_header);
 }
 Token APIServer::get_header_token(const std::string &auth_header) {
-    // Проверяем префикс "Bearer "
-    const std::string prefix = "Bearer ";
-    if (auth_header.size() < prefix.size() ||
-        auth_header.compare(0, prefix.size(), prefix) != 0) {
+    std::cout << "Получаем токен с заголовка" << std::endl;
+    // Проверяем префикс "Bearer"
+    const std::string prefix = "Bearer";
+    if (auth_header.size() < prefix.size() + 1) {
+        std::cout << "Заголовок слишком короток" << std::endl;
         return Token{}; // неверный формат
     }
 
     // Извлекаем токен (после префикса)
-    std::string token_string = auth_header.substr(prefix.size());
+    std::string token_string = auth_header.substr(prefix.size() + 1);
     std::cout << ">---------- Получаем токен из заголовка ----------<" << std::endl;
     std::cout << "Из заголовка получен токен: " << token_string << ". Декодируем." << std::endl;
     return TokenDecoder::decode(token_string, config.get("OWN_TOKEN_GENERATE_KEY"));
@@ -222,9 +225,11 @@ void APIServer::setup_routes() {
         Post - /users/nickname - user:fullname:write
         Post - /users/status - user:status:write, user:block
 
-        Get - /disciplines/list - discipline:teacherslist, discipline:testslist, discipline:studentslist
+        Get - /disciplines/list
+        Get - /disciplines/data - discipline:teacherslist, discipline:testslist, discipline:studentslist
         Post - /disciplines/create - discipline:create
         Post - /disciplines/delete - discipline:delete
+        Post - /disciplines/status - discipline:delete
         Post - /disciplines/text - discipline:text:write
         Post - /disciplines/tests/add - test:create, discipline:test:add
         Post - /disciplines/users/add - discipline:student:add, discipline:teacher:add
@@ -242,7 +247,7 @@ void APIServer::setup_routes() {
         Get - /questions/data - question:read
         Post - /questions/create - question:create
         Post - /questions/update - test:question:update
-        Post - /questions/delete, question:delete
+        Post - /questions/status, question:delete
 
         Post - /tries/start
         Post - tries/answer/change
@@ -334,7 +339,7 @@ void APIServer::setup_routes() {
         // Отправляет
         write_response(res, json, "Список пользователей успешно получен.");
     });
-    // Возвращает информацию пользователя по его ID. Возвращается только та информация которую запросили из следующей: список дисциплин, список прохождений тестов (попыток))
+    // Возвращает информацию пользователя по его ID. Возвращается только та информация которую запросили из следующей: список дисциплин, список // прохождений тестов (попыток))
     server.Get("/users/data", [this](const httplib::Request& req, httplib::Response& res) {
         Token token = get_request_token(req);
         // Проверка токена
@@ -349,7 +354,7 @@ void APIServer::setup_routes() {
             return;
         }
         std::string filter = params_json["filter"].get<std::string>();
-        if (filter == "*" || filter == "all") filter = "nickname fullname status roles email disciplines tries";
+        if (filter == "*" || filter == "all") filter = "nickname fullname status roles email disciplines tests tries";
         
         // Айди пользователя
         std::string user_id = params_json["user_id"].get<std::string>();
@@ -380,7 +385,7 @@ void APIServer::setup_routes() {
             (user_id != token.get_user() && !token.has_role("Admin"))) { write_response(res, "Недостаточно прав.", 403); return; }
         }
         // Попытки прохождения тестов
-        if (filter.find("tries") != std::string::npos) {
+        if (filter.find("tries") != std::string::npos || filter.find("tests") != std::string::npos) {
             // Само разрешение
             if (!token.has_permission("user:tries:read") ||
             // Можно смотреть дисциалины только себе и админу
@@ -390,7 +395,6 @@ void APIServer::setup_routes() {
         // Собирает json
         nlohmann::json json;
         if (filter.find("nickname") != std::string::npos) {
-            std::cout << user_row.get<std::string>("nickname") << std::endl;
             json["nickname"] = user_row.get<std::string>("nickname");
         }
         if (filter.find("fullname") != std::string::npos) {
@@ -439,6 +443,35 @@ void APIServer::setup_routes() {
                 json["disciplines"].push_back(row_json);
             }
         }
+        if (filter.find("tests") != std::string::npos) {
+            json["tests"] = nlohmann::json::array();
+            // Получаем данные о попытках
+            std::vector<DBRow> tries_rows = dbConnector.get_rows("tries", "id", "author='"+user_id+"'");
+            std::vector<int> tries_ids;
+            for (DBRow& try_row : tries_rows)
+                tries_ids.push_back(try_row.get<int>("id"));
+            // Получаем строки данных о тестах
+            std::vector<DBRow> tests_rows = dbConnector.get_rows("tests", "*", "tries && ARRAY["+build_range(tries_ids)+"]");
+            for (DBRow& test_row : tests_rows) {
+                int test_id = test_row.get<int>("id");
+                // Получает дисциплину, соответствующую тесту
+                DBRow discipline_row = dbConnector.get_row("disciplines", "id, title, status", std::to_string(test_id)+"=ANY(tests)");
+                int discipline_id = discipline_row.get<int>("id");
+                nlohmann::json row_json;
+                // Получаем статусы и скипаем, если дисциплина удалена или тест удалён, а автор запроса - не админ
+                std::string test_status = test_row.get<std::string>("status");
+                std::string discipline_status = discipline_row.get<std::string>("status");
+                if ((test_status == "Deleted" || discipline_status == "Deleted") && !token.has_role("Admin")) continue;
+                // Записываем в ответ данные о тесте и его дисциплине
+                row_json["test_id"] = test_id;
+                row_json["test_title"] = test_row.get<std::string>("title");
+                row_json["test_status"] = test_status;
+                row_json["test_discipline_id"] = discipline_id;
+                row_json["test_discipline_title"] = discipline_row.get<std::string>("title");
+                row_json["test_discipline_status"] = discipline_status;
+                json["tests"].push_back(row_json);
+            }
+        }
         if (filter.find("tries") != std::string::npos) {
             json["tries"] = nlohmann::json::array();
             // Получаем строки данных о попытках
@@ -446,7 +479,7 @@ void APIServer::setup_routes() {
             for (DBRow& try_row : tries_rows) {
                 int try_id = try_row.get<int>("id");
                 // Получает тест, соответствующий попытке
-                DBRow test_row = dbConnector.get_row("tests", "id, title, status", std::to_string(try_id)+"=ANY(tries)");
+                DBRow test_row = dbConnector.get_row("tests", "id, title, status", "id="+try_row.get<std::string>("test"));
                 int test_id = test_row.get<int>("id");
                 // Получает дисциплину, соответствующую тесту
                 DBRow discipline_row = dbConnector.get_row("disciplines", "id, title, status", std::to_string(test_id)+"=ANY(tests)");
@@ -728,14 +761,14 @@ void APIServer::setup_routes() {
         }
 
         // Получает список
-        std::vector<DBRow> list = dbConnector.get_rows("disciplines", "id, title, status", "status='Exists'");
+        std::vector<DBRow> list = dbConnector.get_rows("disciplines", "id, title, status", "", "BY id ASC");
         // Формирует json для списка
         nlohmann::json json;
         json["disciplines"] = nlohmann::json::array();
         for (DBRow& row : list) {
-            // Проверяет статус и пропускает, если удалена
+            // Проверяет статус и пропускает, если удалена (но админу можно)
             std::string status = row.get<std::string>("status");
-            if (status == "Deleted") continue;
+            if (status == "Deleted" && !token.has_role("Admin")) continue;
             // Формирует json для отдельной строки
             nlohmann::json row_json;
             row_json["discipline_id"] = row.get<int>("id");
@@ -941,7 +974,7 @@ void APIServer::setup_routes() {
 
         // Получаем ин-фу удаляемой дисциплины
         int discipline_id = std::stoi(body_json["discipline_id"].get<std::string>());
-        DBRow discipline_row = dbConnector.get_row("disciplines", "teachers", "id="+std::to_string(discipline_id));
+        DBRow discipline_row = dbConnector.get_row("disciplines", "status, teachers", "id="+std::to_string(discipline_id));
 
         // Админу автоматически можно
         if (!token.has_role("Admin")) {
@@ -966,8 +999,13 @@ void APIServer::setup_routes() {
         settings.set("status", target_status);
         // Обновляем данные
         int status = dbConnector.update_rows("disciplines", settings, "id="+std::to_string(discipline_id));
-        if (status == 200) write_response(res, "Успешное изменение статуса дисциплины.");
-        else write_response(res, "Ошибка при обновлении базы данных.", status);
+        if (status != 200) {
+            write_response(res, "Ошибка при обновлении базы данных.", status);
+        }
+        // Формирует json
+        nlohmann::json json;
+        json["title"] = discipline_row.get<std::string>("title");
+        write_response(res, json, "Успешное изменение статуса дисциплины.");
     });
     // Заменяет Название и(или) Описание дисциплины на указанные по её ID
     server.Post("/disciplines/text", [this](const httplib::Request& req, httplib::Response& res) {
@@ -990,7 +1028,7 @@ void APIServer::setup_routes() {
 
         // Получаем айди дисциплины
         int discipline_id = std::stoi(body_json["discipline_id"].get<std::string>());
-        DBRow discipline_row = dbConnector.get_row("disciplines", "teachers", "id="+std::to_string(discipline_id));
+        DBRow discipline_row = dbConnector.get_row("disciplines", "title, teachers", "id="+std::to_string(discipline_id));
         // Нельзя, если не преподаватель дисциплины
         std::vector<std::string> teachers_ids = discipline_row.get<std::vector<std::string>>("teachers");
         bool among_teachers = contains(teachers_ids, token.get_user());
@@ -1005,8 +1043,13 @@ void APIServer::setup_routes() {
         if (body_json.contains("describtion")) settings.set("describtion", body_json["describtion"].get<std::string>());
         // Обновляем данные
         int status = dbConnector.update_rows("disciplines", settings, "id="+std::to_string(discipline_id));
-        if (status == 200) write_response(res, "Успешное обновление информации о дисциплине.");
-        else write_response(res, "Ошибка при обновлении базы данных.", status);
+        if (status != 200) {
+            write_response(res, "Ошибка при обновлении базы данных.", status);
+        }
+        // Формирует json
+        nlohmann::json json;
+        json["title"] = discipline_row.get<std::string>("title");
+        write_response(res, json, "Успешное изменение информации о дисциплине.");
     });
     // Добавляет в дисциплину с ID новый тест с указанным названием, пустым списком вопросов и автором и возвращает ID теста. По умолчанию тест не активен.
     server.Post("/disciplines/tests/add", [this](const httplib::Request& req, httplib::Response& res) {
@@ -1081,8 +1124,7 @@ void APIServer::setup_routes() {
         nlohmann::json json;
         json["test_id"] = test_id;
         json["title"] = test_row.get<int>("title");
-        json["status"] = test_row.get<int>("status");
-
+        json["status"] = test_row.get<std::string>("status");
         write_response(res, json, "Успешное добавление нового теста в дисциплину.");
     });
     // Добавляет пользователя с указанным ID на дисциплину с указанным ID
@@ -1100,11 +1142,18 @@ void APIServer::setup_routes() {
             return;
         }
 
+        // Если не передан пользователь, добавляем того, кто отправил запрос
+        std::string user_id = body_json.contains("user_id")  ? body_json["user_id"].get<std::string>() : token.get_user();
+        // Получаем пользователя
+        DBRow user_row = dbConnector.get_row("users", "roles, disciplines", "id='"+user_id+"'");
+        if (user_row.is_empty()) {
+            write_response(res, "Пользователь не найден.", 404);
+            return;
+        }
+
         // Дисциплина
         int discipline_id = dbConnector.get_as_int(body_json["discipline_id"]);
         DBRow discipline_row = dbConnector.get_row("disciplines", "students, teachers", "id="+std::to_string(discipline_id));
-        // Если не передан пользователь, добавляем того, кто отправил запрос
-        std::string user_id = body_json.contains("user_id")  ? body_json["user_id"].get<std::string>() : token.get_user();
 
         // Создаём настройки для изменения БД
         DBRow discipline_settings;
@@ -1112,7 +1161,7 @@ void APIServer::setup_routes() {
         std::string user_type = body_json["user_type"].get<std::string>();
         // Проверка разрешений и формировка настроек для соответствующего типа вставки
         if (user_type == "student") {
-            // Если нет прав (1), или добавляет не себя (1), или уже есть (2), то низя
+            // Если нет прав (1), или добавляет не себя (1), или уже есть (2), или не студент (3), то низя
             // 1
             if (!token.has_permission("discipline:student:add") || user_id != token.get_user()) {
                 write_response(res, "Недостаточно прав.", 403);
@@ -1121,7 +1170,14 @@ void APIServer::setup_routes() {
             // 2
             std::vector<std::string> students_ids = discipline_row.get<std::vector<std::string>>("students");
             for (std::string& student_id : students_ids) if (student_id == user_id) {
-                write_response(res, "Недостаточно прав.", 403);
+                write_response(res, "Пользователь уже зачислен на дисциплину.", 406);
+                return;
+            }
+            // 3
+            std::vector<std::string> user_roles = user_row.get<std::vector<std::string>>("roles");
+            bool is_teacher = contains(user_roles, "Student");
+            if (!is_teacher) {
+                write_response(res, "Пользователь не является студентом.", 406);
                 return;
             }
 
@@ -1130,7 +1186,7 @@ void APIServer::setup_routes() {
             discipline_settings.set("students", dbConnector.convert_to_string_format(students_ids));
         }
         else if (user_type == "teacher") {
-            // Если нет прав на добавление преподавателя (1), или владелец токена не первый препод дисциплины (или админ) (2),
+            // Если нет прав на добавление преподавателя (1), или владелец токена не препод дисциплины (или админ) (2),
             // или уже есть (3), или это не препод (4)
             // 1
             if (!token.has_permission("discipline:teacher:add")) {
@@ -1139,21 +1195,20 @@ void APIServer::setup_routes() {
             }
             // 2
             std::vector<std::string> teachers_ids = discipline_row.get<std::vector<std::string>>("teachers");
-            if (!token.has_role("Admin") && token.get_user() != teachers_ids[0]) {
-                write_response(res, "Недостаточно прав.", 403);
+            if (!token.has_role("Admin") && !contains(teachers_ids, token.get_user())) {
+                write_response(res, "Преподавателей может добавлять только преподаватель.", 403);
                 return;
             }
             // 3
             for (std::string& teacher_id : teachers_ids) if (teacher_id == user_id) {
-                write_response(res, "Недостаточно прав.", 403);
+                write_response(res, "Преподаватель уже находится в дисциплине.", 406);
                 return;
             }
             // 4
-            DBRow user_row = dbConnector.get_row("users", "roles, disciplines", "id='"+user_id+"'");
             std::vector<std::string> user_roles = user_row.get<std::vector<std::string>>("roles");
             bool is_teacher = contains(user_roles, "Teacher");
             if (!is_teacher) {
-                write_response(res, "Недостаточно прав.", 403);
+                write_response(res, "Пользователь не является преподавателем.", 406);
                 return;
             }
 
@@ -1256,6 +1311,10 @@ void APIServer::setup_routes() {
         int test_id = dbConnector.get_as_int(params_json["test_id"]);
         // Получает тест из БД
         DBRow test_row = dbConnector.get_row("tests", "*", "id="+std::to_string(test_id));
+        if (test_row.is_empty()) {
+            write_response(res, "Тест не найден.", 404);
+            return;
+        }
         
         // Удалённый тест может получить только Админ
         std::string status = test_row.get<std::string>("status");
@@ -1311,6 +1370,7 @@ void APIServer::setup_routes() {
                 row_json["options"] = question_row.get<std::vector<std::string>>("options");
                 row_json["points"] = question_row.get<std::vector<int>>("points");
                 row_json["max_options"] = question_row.get<int>("max_options_in_answer");
+                row_json["author_id"] = question_row.get<int>("author");
                 // Добавляет
                 json["questions"].push_back(row_json);
             }
@@ -1318,7 +1378,7 @@ void APIServer::setup_routes() {
         if (filter.find("tries") != std::string::npos) {
             // Если нужно максимальное кол-во для теста
             if (filter.find("max_tries") != std::string::npos) {
-                json["max_tries"] = discipline_row.get<int>("max_tries_for_student");
+                json["max_tries"] = test_row.get<int>("max_tries_for_student");
             }
 
             std::vector<int> tries_ids = test_row.get<std::vector<int>>("tries");
@@ -1387,6 +1447,14 @@ void APIServer::setup_routes() {
 
         // Получаем айди
         int test_id = dbConnector.get_as_int(body_json["test_id"]);
+
+        // Получаем тест
+        DBRow test_row = dbConnector.get_row("disciplines", "title", "id="+std::to_string(test_id));
+        if (test_row.is_empty()) {
+            write_response(res, "Тест не найден.", 404);
+            return;
+        }
+
         // Получаем строку дисциплины
         DBRow discipline_row = dbConnector.get_row("disciplines", "teachers", std::to_string(test_id)+"=ANY (tests)");
         // Нельзя, если не преподаватель дисциплины
@@ -1403,8 +1471,15 @@ void APIServer::setup_routes() {
         if (body_json.contains("describtion")) settings.set("describtion", body_json["describtion"].get<std::string>());
         // Обновляем данные
         int status = dbConnector.update_rows("tests", settings, "id="+std::to_string(test_id));
-        if (status == 200) write_response(res, "Успешное обновление информации о тесте.");
-        else write_response(res, "Ошибка при обновлении базы данных.", status);
+        if (status != 200) {
+            write_response(res, "Ошибка при обновлении базы данных.", status);
+            return;
+        }
+
+        // Формируем json
+        nlohmann::json json;
+        json["title"] = test_row.get<std::string>("title");
+        write_response(res, json, "Успешное обновление информации о тесте.");
     });
     // Для теста с указанным ID устанавливает значение активности. 
     server.Post("/tests/status", [this](const httplib::Request& req, httplib::Response& res) {
@@ -1440,6 +1515,10 @@ void APIServer::setup_routes() {
 
         // Получаем строку теста
         DBRow test_row = dbConnector.get_row("tests", "author, status, tries", "id="+std::to_string(test_id));
+        if (test_row.is_empty()) {
+            write_response(res, "Тест не найден.", 404);
+            return;
+        }
         std::string author = test_row.get<std::string>("author");
         std::string current_status = test_row.get<std::string>("status");
 
@@ -1487,8 +1566,15 @@ void APIServer::setup_routes() {
             }
         }
         
-        if (status == 200) write_response(res, "Успешное обновление статуса теста.");
-        else write_response(res, "Ошибка при обновлении базы данных.", status);
+        if (status != 200) {
+            write_response(res, "Ошибка при обновлении базы данных.", status);
+            return;
+        }
+        
+        // Формирует json
+        nlohmann::json json;
+        json["title"] = test_row.get<std::string>("title");
+        write_response(res, json, "Успешное обновление статуса теста.");
     });
     // Если у теста ещё не было попыток прохождения, то добавляет в теста с указанным ID вопрос с указанным ID в последнюю позицию
     server.Post("/tests/questions/add", [this](const httplib::Request& req, httplib::Response& res) {
@@ -1520,9 +1606,15 @@ void APIServer::setup_routes() {
             write_response(res, "Ресурс не найден.", 404);
             return;
         }
+        // Статус
+        std::string test_status = test_row.get<std::string>("status");
+        if (test_status == "Deleted") {
+            write_response(res, "Тест удалён.", 406);
+            return;
+        }
         // Проверяем на то, есть ли попытки прохождения
-        std::vector<int> tries = test_row.get<std::vector<int>>("tries");
-        if (tries.size() > 0) {
+        std::vector<int> tries_ids = test_row.get<std::vector<int>>("tries");
+        if (tries_ids.size() > 0) {
             write_response(res, "Нельзя изменить список вопросов теста, который уже имеет попытки прохождения.", 406);
             return;
         }
@@ -1543,14 +1635,13 @@ void APIServer::setup_routes() {
             // Если нужная версия указана, получаем её
             ("id="+std::to_string(question_id)+" AND version="+body_json["question_version"].get<std::string>()) :
             // Получаем последнюю версию версию, если она не указана в запросе.
-            ("version=(SELECT MAX(version) FROM questions WHERE id="+std::to_string(question_id)+")"));
+            ("id="+std::to_string(question_id)+" AND version=(SELECT MAX(version) FROM questions WHERE id="+std::to_string(question_id)+")"));
         // Проверяем наличие добавляемого вопроса впринципе
         if (question_row.is_empty()) {
             write_response(res, "Ресурс не найден.", 404);
             return;
         }
 
-        std::string test_status = test_row.get<std::string>("status");
         // Добавляем
         DBRow settings;
         std::vector<std::vector<int>> questions_signatures = test_row.get<std::vector<std::vector<int>>>("questions_signatures");
@@ -1677,6 +1768,24 @@ void APIServer::setup_routes() {
 
         // Получаем сигнатуры
         std::vector<std::vector<int>> questions_signatures = dbConnector.get_as_signatures(body_json["questions_signatures"]);
+        // Проверяем наличие каждого вопроса. Если не надйен, скип
+        for (int i = 0; i < questions_signatures.size(); i++) {
+            // Получает вопрос из БД
+            DBRow question_row = dbConnector.get_row("questions", "id, version", questions_signatures[i].size() > 1 ?
+                // Если нужная версия указана, получаем её
+                ("id="+std::to_string(questions_signatures[i][0])+" AND version="+std::to_string(questions_signatures[i][1])) :
+                // Получаем последнюю версию версию, если она не указана в запросе.
+                ("id="+std::to_string(questions_signatures[i][0])+" AND version=(SELECT MAX(version) FROM questions WHERE id="+std::to_string(questions_signatures[i][0])+")"));
+
+            // Проверяем существование
+            if (question_row.is_empty()) {
+                // Удаляем, если нету
+                questions_signatures.erase(questions_signatures.begin() + i);
+                i++;
+            }
+            // Иначе устанавливаем версию, если не было
+            else if (questions_signatures[i].size() == 1) questions_signatures[i].push_back(question_row.get<int>("id"));
+        }
         // Обновляем запись
         DBRow settings;
         settings.set("questions_signatures", dbConnector.convert_to_string_format(questions_signatures));
@@ -1709,7 +1818,7 @@ void APIServer::setup_routes() {
         std::string user_id = params_json["user_id"].get<std::string>();
 
         // Получаем строку теста
-        DBRow test_row = dbConnector.get_row("tests", "tries", "id="+std::to_string(test_id));
+        DBRow test_row = dbConnector.get_row("tests", "*", "id="+std::to_string(test_id));
         // Проверяем существование теста
         if (test_row.is_empty()) {
             write_response(res, "Тест не найден.", 404);
@@ -1737,11 +1846,20 @@ void APIServer::setup_routes() {
         std::vector<DBRow> tries_rows =
             dbConnector.get_rows("tries", "*", "author='"+user_id+"' AND test="+std::to_string(test_id));
         for (DBRow& try_row : tries_rows) {
+            // Строка с информацией // Можно даже если тест удалён
             nlohmann::json row_json;
+            // О попытке
+            int try_id = try_row.get<int>("id");
+            row_json["try_id"] = try_id;
             row_json["status"] = try_row.get<std::string>("status");
             row_json["points"] = try_row.get<int>("points");
             row_json["max_points"] = try_row.get<int>("max_points");
             row_json["score_percent"] = try_row.get<int>("score_percent");
+            // О тесте попытки
+            row_json["test_id"] = test_row.get<int>("id");
+            row_json["test_status"] = test_row.get<std::string>("status");
+            row_json["test_title"] = test_row.get<std::string>("title");
+            // Добавляет
             json["tries"].push_back(row_json);
         }
         write_response(res, json, "Успешное получение данных о попытке пользователя.");
@@ -1762,18 +1880,23 @@ void APIServer::setup_routes() {
         }
         
         // Получает список
-        std::vector<DBRow> list = dbConnector.get_rows("questions", "id, version, title, status", "");
+        std::vector<DBRow> list = dbConnector.get_rows("questions", "id, version, title, status, options, max_options_in_answer", "", "BY id ASC, version ASC");
         // Формирует json для списка
         nlohmann::json json;
         json["questions"] = nlohmann::json::array();
         for (auto& row : list) {
+            std::string status = row.get<std::string>("status");
+            // Удалённый вопрос может видеть только админ
+            if (status == "Deleted" && !token.has_role("Admin")) continue;
             // Формирует json для отдельной строки
             nlohmann::json row_json;
             row_json["question_id"] = row.get<int>("id");
             row_json["question_version"] = row.get<int>("version");
             row_json["title"] = row.get<std::string>("title");
-            row_json["status"] = row.get<std::string>("status");
-            json.push_back(row_json);
+            row_json["status"] = status;
+            row_json["options"] = row.get<std::vector<std::string>>("options");
+            row_json["max_options"] = row.get<int>("max_options_in_answer");
+            json["questions"].push_back(row_json);
         }
         // Отправляет
         write_response(res, json, "Успешное получение списка вопросов.");
@@ -1808,7 +1931,7 @@ void APIServer::setup_routes() {
             // Если нужная версия указана, получаем её
             ("id="+std::to_string(question_id)+" AND version="+params_json["question_version"].get<std::string>()) :
             // Получаем последнюю версию версию, если она не указана в запросе.
-            ("version=(SELECT MAX(version) FROM questions WHERE id="+std::to_string(question_id)+")"));
+            ("id="+std::to_string(question_id)+" AND version=(SELECT MAX(version) FROM questions WHERE id="+std::to_string(question_id)+")"));
 
         // Проверяем существование
         if (question_row.is_empty()) {
@@ -1909,6 +2032,20 @@ void APIServer::setup_routes() {
             return;
         }
         
+        // Получаем айди
+        int question_id = dbConnector.get_as_int(body_json["question_id"]);
+        // Строку, проверяем на существование
+        DBRow question_row = dbConnector.get_row("questions", "id, version, author", "id="+std::to_string(question_id));
+        if (question_row.is_empty()) {
+            write_response(res, "Вопрос не найден.", 404);
+            return;
+        }
+        // Проверяем на автора
+        if (question_row.get<std::string>("author") != token.get_user()) {
+            write_response(res, "Вопрос может обновить только автор.", 403);
+            return;
+        }
+
         // Добавляет
         DBRow settings;
         settings.set("id", body_json["question_id"].get<std::string>());
@@ -1917,35 +2054,43 @@ void APIServer::setup_routes() {
         settings.set("points", dbConnector.convert_to_string_format(dbConnector.get_as_intarr(body_json["points"])));
         settings.set("max_options_in_answer", body_json["max_options"].get<std::string>()); 
         settings.set("author", token.get_user());
-        DBRow question_row = dbConnector.insert_row("questions", settings);
-        if (question_row.is_empty()) {
+        DBRow new_question_row = dbConnector.insert_row("questions", settings);
+        if (new_question_row.is_empty()) {
             write_response(res, "Ошибка при создании новой версии вопроса.", 500);
             return;
         }
 
         // Формирует json ответ
         nlohmann::json json;
-        json["question_id"] = question_row.get<int>("id");
-        json["question_version"] = question_row.get<int>("version");
+        json["question_id"] = new_question_row.get<int>("id");
+        json["question_version"] = new_question_row.get<int>("version");
         write_response(res, json, "Успешное создание новой версии вопроса.");
     });
     // Если вопрос не используется в тестах (даже удалённых), то вопрос отмечается как удалённый (но реально не удаляется)
-    server.Post("/questions/delete", [this](const httplib::Request& req, httplib::Response& res) {
+    server.Post("/questions/status", [this](const httplib::Request& req, httplib::Response& res) {
         Token token = get_request_token(req);
         // Проверка токена
         if (!token.is_valid()) {
             write_response(res, "Токен недействителен.", 401);
             return;
         }
-        if (!token.has_permission("question:delete")) {
-            write_response(res, "Недостаточно прав.", 403);
-            return;
-        }
 
         // Получение тела, проверка
         nlohmann::json body_json = get_body_json(req.body);
-        if (!body_json.contains("question_id")) {
+        if (!body_json.contains("question_id") && !body_json.contains("status")) {
             write_response(res, "Некорректный запрос.", 400);
+            return;
+        }
+
+        // Статус нужный
+        std::string target_status = body_json["status"].get<std::string>();
+        if (target_status != "Deleted" && target_status != "Exists") {
+            write_response(res, "Статус не существует.", 400);
+            return;
+        }
+        // Если нет прав, а хочет удалить
+        if (target_status == "Deleted" && !token.has_permission("question:delete")) {
+            write_response(res, "Недостаточно прав.", 403);
             return;
         }
 
@@ -1959,8 +2104,8 @@ void APIServer::setup_routes() {
         }
         // Проверяем статус
         std::string current_status = question_row.get<std::string>("status");
-        if (current_status == "Deleted") {
-            write_response(res, "Вопрос уже был удалён.", 403);
+        if (current_status == target_status) {
+            write_response(res, "Вопрос уже имеет нужный статус.", 406);
             return;
         }
         // Можно только админу или автору вопроса
@@ -1972,10 +2117,13 @@ void APIServer::setup_routes() {
 
         // Ставим статус
         DBRow settings;
-        settings.set("status", "Deleted");
-        int status = dbConnector.update_rows("questions", settings, "id="+std::to_string(question_id));
-        if (status == 200) write_response(res, "Успешное удаление вопроса.");
-        else write_response(res, "Ошибка при удалении вопроса.", status);
+        settings.set("status", target_status);
+        int status = body_json.contains("question_version") ?
+            dbConnector.update_rows("questions", settings, "id="+std::to_string(question_id)+" AND version="+body_json["question_version"].get<std::string>()) :
+            dbConnector.update_rows("questions", settings, "id="+std::to_string(question_id));
+        if (status == 200) write_response(res, (body_json.contains("question_version") ?
+            "Успешное изменение статуса вопроса." : "Успешное изменение статуса вопросов."));
+        else write_response(res, "Ошибка при изменении статуса вопроса.", status);
     });
     // Попытки
     // Если пользователь с ID ещё не отвечал на тест с ID и тест находится в активном состоянии,
@@ -2028,7 +2176,7 @@ void APIServer::setup_routes() {
                 std::vector<int> tries_ids = test_row.get<std::vector<int>>("tries"); // айди попыток, принадлежащих тесту
                 size_t current_tries_count =
                     dbConnector.get_rows("tries", "id", "author='"+token.get_user()+ // Получаем строки попыток с нужным автором,
-                        "' AND status='Solved' AND id IN("+build_range(tries_ids)+")") // статусом решённой и принадлежащими тесту
+                        "' AND id IN("+build_range(tries_ids)+")") // и принадлежащими тесту
                             .size(); // кол-во подошедших строк
                 if (current_tries_count >= max_tries_count) { write_response(res, "Попытки исчерпаны.", 403); return; }
             }
@@ -2134,17 +2282,17 @@ void APIServer::setup_routes() {
         // Можно, если сам
         std::string author_id = try_row.get<std::string>("author");
         if (author_id != token.get_user()) {
-            write_response(res, "Недостаточно прав.", 403);
+            write_response(res, "Нельзя менять ответ не своей попытки.", 403);
             return;
         }
         
         // Нельзя, если попытка не существует, или окончена
         if (try_row.is_empty()) {
-            write_response(res, "Ресурс не найден.", 404);
+            write_response(res, "Попытка не найдена.", 404);
             return;
         }
         if (try_row.get<std::string>("status") != "Solving") {
-            write_response(res, "Недостаточно прав.", 403);
+            write_response(res, "Попытка уже окончена.", 406);
             return;
         }
 
@@ -2154,56 +2302,6 @@ void APIServer::setup_routes() {
         settings.set("options", dbConnector.convert_to_string_format(options));
         int status = dbConnector.update_rows("answers", settings, "id="+std::to_string(answer_id));
         if (status == 200) write_response(res, "Успешное изменение ответа.");
-        else write_response(res, "Ошибка при обновлении базы данных.", status);
-    });
-    // Если попытка которой принадлежит ответ не завершена, то изменяет индекс варианта ответа на -1.
-    server.Post("/tries/answer/delete", [this](const httplib::Request& req, httplib::Response& res) {
-        Token token = get_request_token(req);
-        // Проверка токена
-        if (!token.is_valid()) {
-            write_response(res, "Токен недействителен.", 401);
-            return;
-        }
-        // Получение тела, проверка
-        nlohmann::json body_json = get_body_json(req.body);
-        if (!body_json.contains("answer_id")) {
-            write_response(res, "Некорректный запрос.", 400);
-            return;
-        }
-
-        // Получить ответ
-        int answer_id = dbConnector.get_as_int(body_json["answer_id"]);
-        // Попытку
-        DBRow try_row = dbConnector.get_row("tries", "*", std::to_string(answer_id)+"=ANY(answers)");
-        // Проверяем на её существование
-        if (try_row.is_empty()) {
-            write_response(res, "Ресурс не найден.", 404);
-            return;
-        }
-
-        // Можно, если сам
-        std::string author_id = try_row.get<std::string>("author");
-        if (author_id != token.get_user()) {
-            write_response(res, "Недостаточно прав.", 403);
-            return;
-        }
-
-        // Нельзя, если попытка не существует, или окончена
-        if (try_row.is_empty()) {
-            write_response(res, "Ресурс не найден.", 404);
-            return;
-        }
-        if (try_row.get<std::string>("status") != "Solving") {
-            write_response(res, "Недостаточно прав.", 403);
-            return;
-        }
-
-        // Меняем значение ответа
-        std::vector<int> answer_options = {};
-        DBRow settings;
-        settings.set("options", dbConnector.convert_to_string_format(answer_options));
-        int status = dbConnector.update_rows("answers", settings, "id="+std::to_string(answer_id));
-        if (status == 200) write_response(res, "Успешное удаление ответа.");
         else write_response(res, "Ошибка при обновлении базы данных.", status);
     });
     // Если тест находится в активном состоянии и пользователь ещё не закончил попытку, то устанавливает попытку в состояние: завершено. Если тест переключили в состояние не активный, то все попытки для него автоматически устанавливаются в состояние: завершено
@@ -2281,7 +2379,7 @@ void APIServer::setup_routes() {
         DBRow try_row = dbConnector.get_row("tries", "*", "id="+std::to_string(try_id));
         // Проверяем существование 
         if (try_row.is_empty()) {
-            write_response(res, "Ресурс не найден.", 404);
+            write_response(res, "Попытка не найдена.", 404);
             return;
         }
 
@@ -2300,7 +2398,7 @@ void APIServer::setup_routes() {
             // Проверяем, что автор запроса - преподаватель дисциплины, к которой привязан тест
             bool among_teachers = contains(teachers_ids, token.get_user());
             if (!among_teachers) {
-                write_response(res, "Недостаточно прав.", 403);
+                write_response(res, "Посмотреть попытку могут только преподаватель соответствующей дисциплины и её автор.", 403);
                 return;
             }
         }
@@ -2410,7 +2508,7 @@ void APIServer::setup_routes() {
         }
 
         // Получаем строки сообщений
-        std::vector<DBRow> news_rows = dbConnector.get_rows("news", "*", "status <> 'Deleted AND recipient="+user_id);
+        std::vector<DBRow> news_rows = dbConnector.get_rows("news", "*", "status <> 'Deleted' AND recipient='"+user_id+"'");
         // Формируем json
         nlohmann::json json;
         json["news"] = nlohmann::json::array();
@@ -2425,7 +2523,7 @@ void APIServer::setup_routes() {
             row_json["text"] = news_row.get<std::string>("text");
             // Начало добавления отправителя
             std::string sender_id = news_row.get<std::string>("sender");
-            DBRow sender_row = dbConnector.get_row("users", "id, first_name, last_name, patronimyc", "id="+sender_id);
+            DBRow sender_row = dbConnector.get_row("users", "id, first_name, last_name, patronimyc", "id='"+sender_id+"'");
             std::string fullname;
             if (sender_row.is_empty())
                 fullname = "Неизвестно";
@@ -2478,7 +2576,7 @@ void APIServer::setup_routes() {
         DBRow news_row = dbConnector.get_row("news", "status, sender, recipient", "id="+std::to_string(news_id));
         // Проверяем существование 
         if (news_row.is_empty()) {
-            write_response(res, "Получатель не найден.", 404);
+            write_response(res, "Не найдена новость.", 404);
             return;
         }
 
@@ -2500,9 +2598,12 @@ void APIServer::setup_routes() {
 
         DBRow settings;
         settings.set("status", target_status);
-        int status = dbConnector.update_rows("news", settings, "id="+news_id);
-        if (status == 200) write_response(res, "Статус сообщения изменён.");
-        else write_response(res, "Ошибка при изменении статуса сообщения.", status);
+        int status = dbConnector.update_rows("news", settings, "id="+std::to_string(news_id));
+        if (status != 200) {
+            write_response(res, "Ошибка при изменении статуса сообщения.", status);
+            return;
+        }
+        write_response(res, "Статус сообщения изменён.");
     });
 }
 

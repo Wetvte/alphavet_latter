@@ -65,7 +65,7 @@ public:
     // Делает одну запись в таблицу с указанным названием и
     DBRow insert_row(const std::string &table, const DBRow &setting_row);
     // Получает записи строк из указанной таблицы
-    std::vector<DBRow> get_rows(const std::string &table, const std::string &columns = "*", const std::string &where = "");
+    std::vector<DBRow> get_rows(const std::string &table, const std::string &columns = "*", const std::string &where = "", const std::string &order = "");
     DBRow get_row(const std::string &table, const std::string &columns = "*", const std::string &where = "");
     // Обновление строки
     int update_rows(const std::string &table, const DBRow &values, const std::string &where);
@@ -226,15 +226,29 @@ std::vector<std::string> DBRow::get<std::vector<std::string>>(const std::string 
 
     std::string current = "";
     bool inQuotes = false;
-    for (char symbol : value)
+    bool esc = false;
+    for (int i = 0; i < value.size(); i++)
     {
-        if (symbol == '"')
+        if (value[i] == '\\')
         {
-            if (inQuotes)
-                current += symbol;
-            inQuotes = !inQuotes;
+            esc = true;
         }
-        else if (symbol == ',' && !inQuotes)
+        if (value[i] == '"')
+        {
+            if (esc)
+            {
+                current += value[i];
+                esc = false;
+            }
+            else inQuotes = !inQuotes;
+        }
+        else if (esc)
+        {
+            current += '\\';
+            current += value[i];
+            esc = false;
+        }
+        else if (value[i] == ',' && !inQuotes)
         {
             std::cout << "Found string " << current << std::endl;
             result.push_back(current);
@@ -242,7 +256,7 @@ std::vector<std::string> DBRow::get<std::vector<std::string>>(const std::string 
         }
         else
         {
-            current += symbol;
+            current += value[i];
         }
     }
     std::cout << "Found string " << current << std::endl;

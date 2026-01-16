@@ -184,7 +184,7 @@ DBRow DBConnector::insert_row(const std::string &table, const DBRow &setting_row
     return result;
 }
 // Получение строк
-std::vector<DBRow> DBConnector::get_rows(const std::string &table, const std::string &columns, const std::string &where)
+std::vector<DBRow> DBConnector::get_rows(const std::string &table, const std::string &columns, const std::string &where, const std::string &order)
 {
     std::cout << "DB Connection: " << PQstatus(connection) << std::endl;
     // Для результата
@@ -195,6 +195,10 @@ std::vector<DBRow> DBConnector::get_rows(const std::string &table, const std::st
     {
         // Ставим фильтр если нужно
         sql += " WHERE " + where;
+    }
+    if (!order.empty()) {
+        // Добавляем сортировку
+        sql += " ORDER " + order;
     }
     sql += ";";
     std::cout << "Getting rows request " << sql << std::endl;
@@ -250,7 +254,7 @@ int DBConnector::update_rows(const std::string &table, const DBRow &values, cons
     std::string set_part = "";
     for (const auto &[col, val] : values.get_map())
     {
-        set_part += (set_part == "" ? "" : ", ") + col + " = " + shield(val);
+        set_part += (set_part == "" ? "" : ", ") + col + "=" + shield(val);
     }
 
     sql += set_part + " WHERE " + where + ";";
@@ -273,15 +277,18 @@ std::string DBConnector::shield(const std::string &value)
     if (value.empty())
         return "NULL";
     std::string result = "";
-    for (char symbol : value)
+    for (int i = 0; i < value.size(); i++)
     {
-        switch (symbol)
+        switch (value[i])
         {
         case '\'': // Одиночная кавычка
-            result += "''";
+            result += "\\'";
             break;
         case '\\': // Обратный слеш
-            result += "\\\\";
+        // Так как экранируется и массив текстов и нормальные значения, нужно как-то обеспечить отсутствие экранирования
+        // обратного слеша, экранирующего двойные кавычки внутри элемента для массивов текста, но, при этом, он должен экранироваться у других.
+        // Я не придумал лучше, чем проверить, заключён ли элемент в фигурные скобки, и есть ли после \ двойная кавычка. Если нет - экранируем
+            if (value.front() != '{' && value.back() != '}' && value[i+1] != '"') result += "\\\\";
             break;
         case '\n': // Новая строка
             result += "\\n";
@@ -290,7 +297,7 @@ std::string DBConnector::shield(const std::string &value)
             result += "\\t";
             break;
         default:
-            result += symbol; // Остальные символы просто добавляем
+            result += value[i]; // Остальные символы просто добавляем
             break;
         }
     }
@@ -341,9 +348,9 @@ std::string DBConnector::convert_to_string_format(const std::vector<std::string>
             result += ",";
         // Проверка на наличие "
         size_t pos = 0;
-        while ((pos = line.find('"', pos)) != std::string::npos)
+        while ((pos = line.find("\"", pos)) != std::string::npos)
         {
-            line.replace(pos, 1, "\"\"");
+            line.replace(pos, 1, "\\\"");
             pos += 2; // сдвигаем позицию после замены
         }
         // Вставка
