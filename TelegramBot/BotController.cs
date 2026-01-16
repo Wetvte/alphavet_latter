@@ -82,7 +82,7 @@ namespace TelegramBot {
                 if (!long.TryParse(body["chat_id"].ToString(), out long chatId)) return;
 
                 await botClient.SendMessage(chatId,
-                string.Join(Environment.NewLine, new[] {
+                string.Join(Environment.NewLine, new string[] {
                 "Вас приветствует проект Latter.",
                 "Введите /help для получения списка команд."
                 }));
@@ -94,12 +94,12 @@ namespace TelegramBot {
             {
                 JObject body = await GetDataFromBody(context.Request.Body);
                 if (!long.TryParse(body["chat_id"].ToString(), out long chatId)) return;
-                string filter = body["filter"].ToString();
+                string filter = body.ContainsKey("filter") ? body["filter"].ToString() : "-all";
                 if (filter == "-all") filter = "-reg -login -user -news -discipline -test -question -try -answer";
 
                 if (filter == "-commands") {
                     await botClient.SendMessage(chatId, 
-                    string.Join(Environment.NewLine, new[] {
+                    string.Join(Environment.NewLine, new string[] {
                     "Выберите тип команд, который хотите получить:",
                     "/help -all - Все команды.",
                     "/help -reg - Команды для регистрации аккаунта.",
@@ -115,7 +115,7 @@ namespace TelegramBot {
                 else {
                     if (filter.Contains("-reg")) {
                         await botClient.SendMessage(chatId, 
-                        string.Join(Environment.NewLine, new[] {
+                        string.Join(Environment.NewLine, new string[] {
                         "/reg (тип) (параметры) - Регистрация аккаунта. Тип регистрации и запрашиваемые параметры:",
                         "-init (Проверить возможность регистрации аккаунта и получить код подтверждения): почта, никнейм, имя, фамилия, отчество, пароль, повтор пароля;",
                         "-verify (Подтверждение регистрации): код с почты",
@@ -123,7 +123,7 @@ namespace TelegramBot {
                     }
                     if (filter.Contains("-login")) {
                         await botClient.SendMessage(chatId, 
-                        string.Join(Environment.NewLine, new[] {
+                        string.Join(Environment.NewLine, new string[] {
                         "/login (тип) (параметры) - Авторизоваться выбранным способом. Тип авторизации и запрашиваемые параметры:",
                         "-default (Обычная авторизация с паролем): почта, пароль;",
                         "-code (Авторизация с отправкой кода на авторизированный аккаунт): почта, код (если не будет введён код, он сгенерируется и его можно будет увидеть в разделе news на авторизированном устройстве)",
@@ -135,14 +135,14 @@ namespace TelegramBot {
                     }
                     if (filter.Contains("-news")) {
                         await botClient.SendMessage(chatId, 
-                        string.Join(Environment.NewLine, new[] {
+                        string.Join(Environment.NewLine, new string[] {
                         "/news - Список всех ваших сообщений",
                         "/news -status (айди) Deleted - Удаляет сообщение из списка"
                         }));
                     }
                     if (filter.Contains("-user")) {
                         await botClient.SendMessage(chatId, 
-                        string.Join(Environment.NewLine, new[] {
+                        string.Join(Environment.NewLine, new string[] {
                         "/users - Список всех пользователей",
                         "/user (операция) (айди) (параметр) - Операция с пользователем с ID. Наличие/Отсутствие параметра определяет его Чтение/Запись",
                         "/me (операция) (параметр) - то же самое, но вместо айди автоматически подставляется ваш",
@@ -159,7 +159,7 @@ namespace TelegramBot {
                     }
                     if (filter.Contains("-discipline")) {
                         await botClient.SendMessage(chatId, 
-                        string.Join(Environment.NewLine, new[] {
+                        string.Join(Environment.NewLine, new string[] {
                         "/disciplines - Список всех дисциплин",
                         "/discipline -create (название) (описание) (айди преподавателя) - Создание новой дисциплины",
                         "/discipline -status (айди) Deleted - Удаление дисциплины",
@@ -175,7 +175,7 @@ namespace TelegramBot {
                     }
                     if (filter.Contains("-test")) {
                         await botClient.SendMessage(chatId, 
-                        string.Join(Environment.NewLine, new[] {
+                        string.Join(Environment.NewLine, new string[] {
                         "/test -info (айди теста) (название) (описание) - Чтение/Установка названия и описания теста",
                         "/test -status (айди) Activated/Deactivated/Deleted - Активация/Деактивация/Удаление теста",
                         "/test -tries (айди теста) - Попытки прохождения теста",
@@ -188,7 +188,7 @@ namespace TelegramBot {
                     }
                     if (filter.Contains("-question")) {
                         await botClient.SendMessage(chatId, 
-                        string.Join(Environment.NewLine, new[] {
+                        string.Join(Environment.NewLine, new string[] {
                         "/questions - Список всех вопросов",
                         "/question -create (название) (кол-во вариантов ответа) -o (текст ответа) (кол-во очков) - Создание вопроса (через -opinfo передаются параметры отдельного ответа)",
                         "/question -update (айди) (название) (кол-во вариантов ответа) -o (текст ответа) (кол-во очков) - Создаёт новую версию существующего вопроса (аналогично созданию вопроса, но добавляется параметр ID в операции update)",
@@ -198,7 +198,7 @@ namespace TelegramBot {
                     }
                     if (filter.Contains("-tries")) {
                         await botClient.SendMessage(chatId, 
-                        string.Join(Environment.NewLine, new[] {
+                        string.Join(Environment.NewLine, new string[] {
                             "/try -start (айди теста) - Выводит все вопросы теста и начинает попытку прохождения",
                             "/try -stop (айди попытки) - Заканчивает попытку прохождения",
                             "/try -view (айди попытки) - Посмотреть ответы и результаты попытки прохождения",
@@ -209,7 +209,7 @@ namespace TelegramBot {
                     }
 
                     await botClient.SendMessage(chatId, 
-                    string.Join(Environment.NewLine, new[] {
+                    string.Join(Environment.NewLine, new string[] {
                     "Примечания:",
                     "1) Параметры передаются через пробел.",
                     "2) Чтобы передать в качестве параметра текст, содержащий пробелы, его необходимо заключить в двойные кавычки. Если они присутствуют в тексте - их следует дублировать.",
@@ -225,9 +225,9 @@ namespace TelegramBot {
             {
                 JObject body = await GetDataFromBody(context.Request.Body);
                 if (!long.TryParse(body["chat_id"].ToString(), out long chatId)) return;
-
-                await botClient.SendMessage(chatId, 
-                string.Join(Environment.NewLine, new[] {
+                
+                await botClient.SendMessage(chatId,
+                string.Join(Environment.NewLine, new string[] {
                 "Отправляем запрос на регистрацию пользователя:",
                 $"Почта: {body["email"].ToString()}",
                 $"Никнейм: {body["nickname"].ToString()}",
@@ -300,7 +300,7 @@ namespace TelegramBot {
                 JObject body = await GetDataFromBody(context.Request.Body);
                 if (!long.TryParse(body["chat_id"].ToString(), out long chatId)) return;
 
-                await botClient.SendMessage(chatId, $"Отправляем запрос на регистрацию пользователя {body["email"].ToString()}");
+                await botClient.SendMessage(chatId, $"Отправляем запрос на авторизацию пользователя {body["email"].ToString()}");
 
                 // Создаём тело запроса
                 JObject request_body = new JObject();

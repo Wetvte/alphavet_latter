@@ -402,7 +402,7 @@ document.addEventListener("DOMContentLoaded", function () {
     document.getElementById("githubAuth").addEventListener("click", async function () {
         open_loading();
         const [status, response] = await post_to_webclient("login", { type: "github" }, {});
-        if (response && response["oauth_connect_success_state"] && status == 200) {
+        if (response && status == 200) {
             console.log("Переходим на " + response["oauth_redirect_url"]);
             open_ref(response["oauth_redirect_url"]);
         } else {
@@ -413,7 +413,7 @@ document.addEventListener("DOMContentLoaded", function () {
     document.getElementById("yandexAuth").addEventListener("click", async function () {
         open_loading();
         const [status, response] = await post_to_webclient("login", { type: "yandex" }, {});
-        if (response && response["oauth_connect_success_state"] && status == 200) {
+        if (response && status == 200) {
             console.log("Переходим на " + response["oauth_redirect_url"]);
             open_ref(response["oauth_redirect_url"]);
         } else {

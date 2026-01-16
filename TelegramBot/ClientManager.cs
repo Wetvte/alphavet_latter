@@ -87,17 +87,17 @@ namespace TelegramBot {
                                             body["patronimyc"] = command.GetConfiguration(0).GetParametr(4);
                                             body["password"] = command.GetConfiguration(0).GetParametr(5);
                                             body["repeat_password"] = command.GetConfiguration(0).GetParametr(6);
+                                            await controllerClient.PostAsync("init/registration", body);
+                                            success = true;
                                         }
-                                        await controllerClient.PostAsync("init/registration", body);
-                                        success = true;
                                         break;
                                     case "-verify":
                                         if (command.GetConfiguration(0).ParametresCount() >= 1)
                                         {
                                             body["code"] = command.GetConfiguration(0).GetParametr(0);
+                                            await controllerClient.PostAsync("verify/registration", body);
+                                            success = true;
                                         }
-                                        await controllerClient.PostAsync("verify/registration", body);
-                                        success = true;
                                         break;
                                 }
                             break;
@@ -109,9 +109,10 @@ namespace TelegramBot {
                                         {
                                             body["email"] = command.GetConfiguration(0).GetParametr(0);
                                             body["password"] = command.GetConfiguration(0).GetParametr(1);
+                                            
+                                            await controllerClient.PostAsync("login?type=default", body);
+                                            success = true;
                                         }
-                                        await controllerClient.PostAsync("login?type=default", body);
-                                        success = true;
                                         break;
                                     case "-code":
                                         if (command.GetConfiguration(0).ParametresCount() >= 1)

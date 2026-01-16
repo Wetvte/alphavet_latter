@@ -1145,7 +1145,7 @@ void APIServer::setup_routes() {
         // Если не передан пользователь, добавляем того, кто отправил запрос
         std::string user_id = body_json.contains("user_id")  ? body_json["user_id"].get<std::string>() : token.get_user();
         // Получаем пользователя
-        DBRow user_row = dbConnector.get_row("users", "roles, disciplines", "id='"+user_id+"'");
+        DBRow user_row = dbConnector.get_row("users", "roles", "id='"+user_id+"'");
         if (user_row.is_empty()) {
             write_response(res, "Пользователь не найден.", 404);
             return;

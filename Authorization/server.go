@@ -475,7 +475,7 @@ func InitAuthorizationHandler(w http.ResponseWriter, r *http.Request) {
 	}, 200)
 }
 
-// ServiceAuthHandler — перенаправляет пользователя на страницу авторизации сервиса
+// Перенаправляет пользователя на страницу авторизации сервиса
 func ServiceAuthHandler(w http.ResponseWriter, r *http.Request) {
 	fmt.Println("Обработка авторизации через сервис.")
 	requestData, err := GetDataFromBody(&r.Body)
@@ -722,7 +722,7 @@ func ServiceAuthCallbackHandler(w http.ResponseWriter, r *http.Request) {
 		Domain: "localhost",
 	})*/
 
-	result_callback_url := callback_url + "?session_token=" + (*auth_data)["session_token"].(string);
+	result_callback_url := callback_url + "?session_token=" + (*auth_data)["session_token"].(string)
 	log.Println("Перенаправление на ", result_callback_url)
 	http.Redirect(w, r, result_callback_url, http.StatusFound)
 }
@@ -827,20 +827,21 @@ func CheckAuthHandler(w http.ResponseWriter, r *http.Request) {
 		log.Println("Запрос отклонён.")
 		// Пользователь не найден или ошибка
 		WriteResponse(&w, &map[string]interface{}{
-			"message":     "Пользователь не найден.",
+			"message": "Пользователь не найден.",
 		}, 404)
 		return
 	} else {
 		log.Println("Запрос одобрен.")
 		// Пользователь найден, не ошибка
 		WriteResponse(&w, &map[string]interface{}{
-			"message":     "Пользователь найден.",
-			"nickname":    (*userData)["nickname"],
+			"message":  "Пользователь найден.",
+			"nickname": (*userData)["nickname"],
 		}, 200)
 	}
 }
 
-//  Подтверждает авторизацию по login_token.
+//	Подтверждает авторизацию по login_token.
+//
 // (По сути, копия CheckAuth, но с отличиями - удаляет токен с БД и отправляет данные)
 func ConfirmAuthHandler(w http.ResponseWriter, r *http.Request) {
 	log.Println("Запрос на подтверждение входа и выдачу параметров.")
@@ -861,7 +862,7 @@ func ConfirmAuthHandler(w http.ResponseWriter, r *http.Request) {
 		log.Println("Запрос отклонён.")
 		// Пользователь не найден или ошибка
 		WriteResponse(&w, &map[string]interface{}{
-			"message":     "Пользователь не найден.",
+			"message": "Пользователь не найден.",
 		}, 404)
 		return
 	} else {
@@ -884,7 +885,7 @@ func ConfirmAuthHandler(w http.ResponseWriter, r *http.Request) {
 			log.Println("Запрос на подтверждение входа отклонён из-за ошибки обновления статуса.")
 			// Пользователь не обновлён
 			WriteResponse(&w, &map[string]interface{}{
-				"message":     "Пользователь не обновлён.",
+				"message": "Пользователь не обновлён.",
 			}, 500)
 			return
 		}
@@ -894,7 +895,7 @@ func ConfirmAuthHandler(w http.ResponseWriter, r *http.Request) {
 			log.Println("Запрос на подтверждение входа отклонён из-за отсутствия токена обновления.")
 			// Пользователь не обновлён
 			WriteResponse(&w, &map[string]interface{}{
-				"message":     "Токен обновления утерян или не был присвоен.",
+				"message": "Токен обновления утерян или не был присвоен.",
 			}, 401)
 			return
 		}
@@ -903,7 +904,7 @@ func ConfirmAuthHandler(w http.ResponseWriter, r *http.Request) {
 		// И вернуть
 		log.Println("Вход одобрен для имени", (*userData)["nickname"].(string))
 		WriteResponse(&w, &map[string]interface{}{
-			"message":     "Вход одобрен.",
+			"message": "Вход одобрен.",
 
 			"id":            (*userData)["id"].(string),
 			"email":         (*userData)["email"].(string),
@@ -982,25 +983,25 @@ func RefreshAccessHandler(w http.ResponseWriter, r *http.Request) {
 		}, 401)
 		return
 	}
-	
+
 	// Запрос на модуль тестировани для получения статуса пользователя
 	user_server_status, err, message := GetUserServerStatus((*userData)["id"].(string))
 	if err != nil {
 		log.Println("Не получилось проверить статус.")
 		WriteResponse(&w, &map[string]interface{}{
-			"message":  message,
+			"message": message,
 		}, 500)
 		return
 	}
 	// Проверяем статус
 	if user_server_status == "Blocked" {
-		log.Println( "Пользователь заблокирован.")
+		log.Println("Пользователь заблокирован.")
 		WriteResponse(&w, &map[string]interface{}{
-			"message":  "Пользователь заблокирован.",
+			"message": "Пользователь заблокирован.",
 		}, 403)
 		return
 	}
-	
+
 	// Создаёт токены
 	roles := (*userData)["roles"].(primitive.A)
 	new_access_token := GenerateNewAccessToken((*userData)["id"].(string), roles, GenerateBasePermissionsListForRoles(roles))
@@ -1009,7 +1010,7 @@ func RefreshAccessHandler(w http.ResponseWriter, r *http.Request) {
 	// Заменяет новым токеном обновления старый
 	refresh_tokens_slice := (*userData)["refresh_tokens"].(primitive.A)
 	for i := 0; i < len(refresh_tokens_slice); i++ {
-		if refresh_tokens_slice[i].(string) == refresh_token {
+		if refresh_tokens_slice[i] == refresh_token {
 			refresh_tokens_slice[i] = new_refresh_token
 			(*userData)["refresh_tokens"] = refresh_tokens_slice
 			break
@@ -1112,7 +1113,7 @@ func LogoutUserHandler(w http.ResponseWriter, r *http.Request) {
 		permissionsSlice := (*claims)["permissions"].(primitive.A)
 		has_permission := false
 		for i := 0; i < len(permissionsSlice); i++ {
-			if permissionsSlice[i].(string) == "user:block" {
+			if permissionsSlice[i].(interface{}) == "user:block" {
 				has_permission = true
 				break
 			}
@@ -1276,10 +1277,10 @@ func UserDataChangeHandler(w http.ResponseWriter, r *http.Request) {
 	// Роли
 	if roles, ok := (*requestData)["roles"]; ok {
 		// Проверка доступности действия по правам
-		permissionsSlice := (*claims)["permissions"].(primitive.A)
+		permissionsSlice := (*claims)["permissions"].([]interface{})
 		has_roles_write_permission := false
 		for i := 0; i < len(permissionsSlice); i++ {
-			if permissionsSlice[i].(string) == "user:roles:write" {
+			if permissionsSlice[i] == "user:roles:write" {
 				has_roles_write_permission = true
 				break
 			}
@@ -1293,9 +1294,9 @@ func UserDataChangeHandler(w http.ResponseWriter, r *http.Request) {
 		}
 		// Проверка доступности действия по настройкам
 		var err error
-		rolesSlice := (*requestData)["roles"].(primitive.A)
+		rolesSlice := (*requestData)["roles"].([]interface{})
 		for i := 0; i < len(rolesSlice); i++ {
-			if rolesSlice[i].(string) != "Student" && rolesSlice[i].(string) != "Teacher" && rolesSlice[i].(string) != "Admin" {
+			if rolesSlice[i] != "Student" && rolesSlice[i] != "Teacher" && rolesSlice[i] != "Admin" {
 				err = fmt.Errorf("Одна или более ролей не существует(ют)")
 				break
 			}

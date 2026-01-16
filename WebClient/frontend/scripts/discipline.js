@@ -388,7 +388,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     // Отправка запроса
     const [status, response] = await post_to_webclient("data/write",
       { source: "disciplines/users/add" },
-      { discipline_id: load_data["discipline_id"], user_type: "student" });
+      { discipline_id: load_data["discipline_id"], user_type: "student", user_id: load_data.viewer["id"] });
     // Обрабатывает ошибку
     if (status != 200) {
       send_notification("error", response && response["message"] ? response["message"] : "Ошибка при записи.");
