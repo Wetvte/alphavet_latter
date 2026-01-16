@@ -31,13 +31,15 @@
 - Создать базу данных на сайте Redis
 - Создать файл .env с данными с указать его путь в коде файла WebClient/backend/server.js.
 - Настроить содержимое .env файла:
-    ```SERVER_DOMAIN=localhost
+    ```
+    SERVER_DOMAIN=localhost
     SERVER_PORT=3000 # Порт сервера клиента
     SERVER_URL=http://localhost/web
     SERVERS_COUNT=
     REDIS_URI=redis://(Ссылка) # Ссылка на редис, как она дана на сайте
     AUTHORIZATION_MODULE_URL=http://localhost:8080 # Адрес подуля авторизации
-    TEST_MODULE_URL=http://localhost:4000 # Адрес Основного подуля```
+    TEST_MODULE_URL=http://localhost:4000 # Адрес Основного подуля
+    ```
 - Настроить переменную persistent_path в методах generate_site_page и generate_entry_page в WebClient/backend/server.js
 - Запускается командой node server.js в директиве WebClient/backend
 
@@ -45,21 +47,24 @@
 - Создать бота и сохранить его токен
 - Создать файл .env с данными с указать его путь в коде файла ...
 - Настроить содержимое .env файла:
-    ```SERVER_HOST=localhost
+    ```
+    SERVER_HOST=localhost
     SERVER_PORT=2000
     SERVER_URL=http://localhost/tbot
     SERVERS_COUNT=
     REDIS_URI=домен:порт,password=пароль,abortConnect=false,connectTimeout=10000,syncTimeout=10000 # Для редис нужна строка вида
     AUTHORIZATION_MODULE_URL=http://localhost:8080 # Адрес Основного модуля
     TEST_MODULE_URL=http://127.0.0.1:4000 # Адрес модуля Авторизации
-    BOT_TOKEN=8291005932:AAHK4-Tru9Kye-w-Javu3xjIgwXMHlms5qk # Токен бота```
+    BOT_TOKEN= # Токен бота
+    ```
 - Запускается командой dotnet run в директиве TelegramBot
 
 4) Настроить основной модуль
 - Скачать PostgreSQL
 - Создать файл .env с данными с указать его путь в коде файла TestProcessing/src/db_connector.cpp.
 - Настроить содержимое .env файла:
-    ```DB_HOST=localhost # Для PostgreSQL
+    ```
+    DB_HOST=localhost # Для PostgreSQL
     DB_PORT=5432
     DB_NAME=
     DB_USER=postgres
@@ -69,7 +74,8 @@
     OWN_TOKEN_GENERATE_KEY= # Ключ генерации токенов из модуля Авторизации
     AUTHORIZATION_MODULE_URL=http://localhost:8080 # Адрес Основного подуля Авторизации
     AUTHORIZATION_MODULE_HOST=localhost
-    AUTHORIZATION_MODULE_PORT=8080```
+    AUTHORIZATION_MODULE_PORT=8080
+    ```
 - Создать следующие таблицы: users, disciplines, tests, questions, tries, answers, news.
 - Настроить таблицы кодом ниже.
 - Установить jwt-cpp в vcpkg, расположенном на локальной машине и указать полный путь к нему в TestProcessing/CMakeLists.txt
@@ -81,7 +87,8 @@
 - Перед запуском модулей стоит включить VPN.
 
 # Чтобы объединить клиенты Веб и Телеграм, нужно установить Nginx и в его папке conf изменить файл nginx.conf:
-```worker_processes  1;
+```
+worker_processes  1;
 
 events {
     worker_connections  1024;
