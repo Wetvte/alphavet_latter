@@ -1,5 +1,7 @@
+using System;
 using StackExchange.Redis;
 using System.Threading.Tasks;
+using Newtonsoft.Json.Linq;
 
 namespace TelegramBot {
     public class RedisStorage
@@ -9,33 +11,46 @@ namespace TelegramBot {
 
         public RedisStorage(string connectionString)
         {
-            //redis = ConnectionMultiplexer.Connect(connectionString);
-            //database = redis.GetDatabase();
+            redis = ConnectionMultiplexer.Connect(connectionString);
+            database = redis.GetDatabase();
+            Console.WriteLine("Обработчик подключен к Redis.");
         }
 
         // Сохранить значение
-        public async Task SetAsync(string key, string value)
+        public async Task SetAsync(long key, JObject value)
         {
-            await database.StringSetAsync(key, value);
+            await database.StringSetAsync(key.ToString(), value.ToString());
+            Console.WriteLine($"По ключу {key} сохранено значение {value}");
         }
 
         // Получить значение
-        public async Task<string> GetAsync(string key)
+        public async Task<JObject> GetAsync(long key)
         {
-            var value = await database.StringGetAsync(key);
-            return value.HasValue ? value.ToString() : null;
+            var value = await database.StringGetAsync(key.ToString());
+            string result = value.HasValue ? value.ToString() : "{}";
+            Console.WriteLine($"По ключу {key} получено значение {result}");
+            return JObject.Parse(result);
+        }
+        public async Task<JObject> GetAuthorizeCheckedAsync(long key)
+        {
+            var value = await database.StringGetAsync(key.ToString());
+            string result = value.HasValue ? value.ToString() : "{}";
+            Console.WriteLine($"По ключу {key} получено значение {result}");
+            JObject user = JObject.Parse(result);
+            user["authorized"] = (value.HasValue && user.ContainsKey("status") && user["status"].ToString() == "Authorized") ? "true" : "false";
+            return user;
         }
 
         // Удалить значение
-        public async Task RemoveAsync(string key)
+        public async Task RemoveAsync(long key)
         {
-            await database.KeyDeleteAsync(key);
+            await database.KeyDeleteAsync(key.ToString());
         }
 
         // Проверить существование ключа
-        public async Task<bool> ExistsAsync(string key)
+        public async Task<bool> ExistsAsync(long key)
         {
-            return await database.KeyExistsAsync(key);
+            return await database.KeyExistsAsync(key.ToString());
         }
     }
 
