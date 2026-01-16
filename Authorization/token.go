@@ -21,14 +21,23 @@ func GenerateBasePermissionsListForRole(role string) primitive.A {
 		return primitive.A{"user:roles:read", "user:disciplines:read", "user:tries:read", "user:fullname:write", "user:status:write",
 			"discipline:teacherslist", "discipline:testslist", "discipline:student:add", "discipline:user:remove",
 			"test:tries:read",
-			"tries/answer/change",
+			"questions:list",
 			"news:write"}
 	case "Teacher":
 		return primitive.A{"user:roles:read", "user:disciplines:read", "user:tries:read", "user:fullname:write", "user:status:write",
 			"discipline:teacherslist", "discipline:testslist", "discipline:studentslist", "discipline:create", "discipline:delete",
 			"discipline:text:write", "discipline:test:add", "discipline:teacher:add", "discipline:user:remove",
 			"test:create", "test:text:write", "test:tries:read", "test:status:write", "test:question:add", "test:question:remove", "test:question:update",
-			"question:read", "question:create", "question:update", "question:delete",
+			"questions:list", "question:read", "question:create", "question:update", "question:delete",
+			"news:write"}
+	case "Tester":
+		return primitive.A{
+			"users:list", "user:roles:read", "user:disciplines:read", "user:tries:read",
+			"user:fullname:write", "user:roles:write", "user:status:write",
+			"discipline:teacherslist", "discipline:testslist", "discipline:studentslist", "discipline:create", "discipline:delete",
+			"discipline:teacher:add", "discipline:user:remove",
+			"test:tries:read", "test:status:write", "test:question:remove",
+			"questions:list", "question:read", "question:delete",
 			"news:write"}
 	case "Admin":
 		return primitive.A{"users:note",

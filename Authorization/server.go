@@ -440,7 +440,7 @@ func InitAuthorizationHandler(w http.ResponseWriter, r *http.Request) {
 	authorization_state := GenerateState()
 
 	// Отправляет код Основному модулю
-	text := "Получен запрос на вход " + time.Now().Format("15:04 02.01.2006") + ".Код подтверждения: " + code
+	text := "Получен запрос на вход " + time.Now().Format("15:04 02.01.2006") + " .Код подтверждения: " + code
 	recipient := (*userData)["id"].(string)
 	news := map[string]interface{}{
 		"recipient": recipient,
@@ -518,12 +518,20 @@ func ServiceAuthHandler(w http.ResponseWriter, r *http.Request) {
 
 	// Если ошибка
 	if err != nil {
+		WriteResponse(&w, &map[string]interface{}{
+			"message": "Это типа значит, что ну кароче, жесть.",
+		}, 500)
 		log.Println(err)
+		return
 	}
 	// Создаём конфиг
 	oAuthConfig, err := CreateOAuthConfig((*requestData)["service_type"].(string))
 	if err != nil { // Не создался конфиг, но такого не будет
+		WriteResponse(&w, &map[string]interface{}{
+			"message": "Это типа значит, что ну кароче, жесть тоже да.",
+		}, 500)
 		log.Println(err)
+		return
 	}
 	url := oAuthConfig.AuthCodeURL(service_state, oauth2.AccessTypeOnline) // Создание юрл с параметром стэйт
 	log.Println("Отправляет данные для редиректа на ", url)
@@ -645,7 +653,7 @@ func ServiceAuthCallbackHandler(w http.ResponseWriter, r *http.Request) {
 		}
 		// Получаем access_token
 		serviceTokenData["access_token"] = params.Get("access_token")
-		serviceTokenData[" refresh_token"] = ""
+		serviceTokenData["refresh_token"] = ""
 		log.Println("От Github получен токен: access_token -", serviceTokenData["access_token"])
 	}
 	// Проверка access_token
@@ -655,7 +663,7 @@ func ServiceAuthCallbackHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Получает данные с сайте с помощью клиента через токен доступа
+	// Получает данные с сайта с помощью клиента через токен доступа
 	gettedUserData, err := GetUserDataFromService(serviceTokenData["access_token"], login_type)
 	if err != nil {
 		DeleteFromDatabase("Authorizations", "auth_service_state", getted_state)
@@ -667,21 +675,25 @@ func ServiceAuthCallbackHandler(w http.ResponseWriter, r *http.Request) {
 	log.Println("Имя пользователя: ", (*sortedUserData)["nickname"])
 	log.Println("Емэил пользователя: ", (*sortedUserData)["email"])
 	// Удаляет запись об авторизации
-	DeleteFromDatabase("Authorizations", "id", (*auth_data)["id"].(string))
+	DeleteFromDatabase("Authorizations", "id", (*auth_data)["id"])
 
-	// Запрос на модуль тестировани для получения статуса пользователя
-	user_server_status, err, message := GetUserServerStatus((*gettedUserData)["id"].(string))
-	if err != nil {
-		http.Error(w, message, http.StatusInternalServerError)
-		http.Redirect(w, r, callback_url, http.StatusFound)
-		fmt.Println(message)
-		return
-	}
-	// Проверяем статус
-	if user_server_status == "Blocked" {
-		http.Error(w, "Пользователь заблокирован.", 403)
-		http.Redirect(w, r, callback_url, http.StatusFound)
-		return
+	// Если пользователь зарегистрирован, проверяет на наличие бана
+	currentUserData, err := GetFromDatabaseByValue("Users", "email", (*sortedUserData)["email"].(string))
+	if err == nil {
+		// Запрос на модуль тестировани для получения статуса пользователя
+		user_server_status, err, message := GetUserServerStatus((*currentUserData)["id"].(string))
+		if err != nil {
+			http.Error(w, message, http.StatusInternalServerError)
+			http.Redirect(w, r, callback_url, http.StatusFound)
+			fmt.Println(message)
+			return
+		}
+		// Проверяем статус
+		if user_server_status == "Blocked" {
+			http.Error(w, "Пользователь заблокирован.", 403)
+			http.Redirect(w, r, callback_url, http.StatusFound)
+			return
+		}
 	}
 
 	// Записывает авторизированного пользователя с персональными токенами
@@ -699,7 +711,7 @@ func ServiceAuthCallbackHandler(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "Ошибка при создании пользователя", http.StatusInternalServerError)
 	}
 
-	log.Println("Сохранение кук сессии ", (*auth_data)["session_token"].(string))
+	/*log.Println("Сохранение кук сессии ", (*auth_data)["session_token"].(string))
 	// Ставим куки
 	http.SetCookie(w, &http.Cookie{
 		Name:     "session_token",
@@ -708,10 +720,11 @@ func ServiceAuthCallbackHandler(w http.ResponseWriter, r *http.Request) {
 		HttpOnly: true,
 		// Secure: true,
 		Domain: "localhost",
-	})
+	})*/
 
-	log.Println("Перенаправление на ", callback_url)
-	http.Redirect(w, r, callback_url, http.StatusFound)
+	result_callback_url := callback_url + "?session_token=" + (*auth_data)["session_token"].(string);
+	log.Println("Перенаправление на ", result_callback_url)
+	http.Redirect(w, r, result_callback_url, http.StatusFound)
 }
 
 // Регистрация нового пользователя
@@ -815,7 +828,6 @@ func CheckAuthHandler(w http.ResponseWriter, r *http.Request) {
 		// Пользователь не найден или ошибка
 		WriteResponse(&w, &map[string]interface{}{
 			"message":     "Пользователь не найден.",
-			"login_token": login_token,
 		}, 404)
 		return
 	} else {
@@ -823,13 +835,12 @@ func CheckAuthHandler(w http.ResponseWriter, r *http.Request) {
 		// Пользователь найден, не ошибка
 		WriteResponse(&w, &map[string]interface{}{
 			"message":     "Пользователь найден.",
-			"login_token": login_token,
 			"nickname":    (*userData)["nickname"],
 		}, 200)
 	}
 }
 
-// ConfirmAuthHandler - Подтверждает авторизацию по login_token.
+//  Подтверждает авторизацию по login_token.
 // (По сути, копия CheckAuth, но с отличиями - удаляет токен с БД и отправляет данные)
 func ConfirmAuthHandler(w http.ResponseWriter, r *http.Request) {
 	log.Println("Запрос на подтверждение входа и выдачу параметров.")
@@ -851,7 +862,6 @@ func ConfirmAuthHandler(w http.ResponseWriter, r *http.Request) {
 		// Пользователь не найден или ошибка
 		WriteResponse(&w, &map[string]interface{}{
 			"message":     "Пользователь не найден.",
-			"login_token": login_token,
 		}, 404)
 		return
 	} else {
@@ -875,7 +885,6 @@ func ConfirmAuthHandler(w http.ResponseWriter, r *http.Request) {
 			// Пользователь не обновлён
 			WriteResponse(&w, &map[string]interface{}{
 				"message":     "Пользователь не обновлён.",
-				"login_token": login_token,
 			}, 500)
 			return
 		}
@@ -886,7 +895,6 @@ func ConfirmAuthHandler(w http.ResponseWriter, r *http.Request) {
 			// Пользователь не обновлён
 			WriteResponse(&w, &map[string]interface{}{
 				"message":     "Токен обновления утерян или не был присвоен.",
-				"login_token": login_token,
 			}, 401)
 			return
 		}
@@ -896,7 +904,6 @@ func ConfirmAuthHandler(w http.ResponseWriter, r *http.Request) {
 		log.Println("Вход одобрен для имени", (*userData)["nickname"].(string))
 		WriteResponse(&w, &map[string]interface{}{
 			"message":     "Вход одобрен.",
-			"login_token": login_token,
 
 			"id":            (*userData)["id"].(string),
 			"email":         (*userData)["email"].(string),
@@ -948,7 +955,7 @@ func GetSubHandler(w http.ResponseWriter, r *http.Request) {
 	}, 200)
 }
 
-// RefreshAccessHandler - обработчик для обновления токенов
+// обработчик для обновления токенов
 func RefreshAccessHandler(w http.ResponseWriter, r *http.Request) {
 	log.Println("Получен запрос на обновление токенов.")
 	// Добываем рефреш токен из заголовков
@@ -973,6 +980,24 @@ func RefreshAccessHandler(w http.ResponseWriter, r *http.Request) {
 		WriteResponse(&w, &map[string]interface{}{
 			"message": "Токен недействителен.",
 		}, 401)
+		return
+	}
+	
+	// Запрос на модуль тестировани для получения статуса пользователя
+	user_server_status, err, message := GetUserServerStatus((*userData)["id"].(string))
+	if err != nil {
+		log.Println("Не получилось проверить статус.")
+		WriteResponse(&w, &map[string]interface{}{
+			"message":  message,
+		}, 500)
+		return
+	}
+	// Проверяем статус
+	if user_server_status == "Blocked" {
+		log.Println( "Пользователь заблокирован.")
+		WriteResponse(&w, &map[string]interface{}{
+			"message":  "Пользователь заблокирован.",
+		}, 403)
 		return
 	}
 	
@@ -1012,16 +1037,16 @@ func RefreshAccessHandler(w http.ResponseWriter, r *http.Request) {
 // Обработчик выхода со всех устройств
 func LogoutAllHandler(w http.ResponseWriter, r *http.Request) {
 	// Добываем токен из заголовков
-	access_token, err := GetTokenFromHeader(r.Header.Get("Authorization"))
-	if err != nil || access_token == "" {
+	refresh_token, err := GetTokenFromHeader(r.Header.Get("Authorization"))
+	if err != nil || refresh_token == "" {
 		WriteResponse(&w, &map[string]interface{}{
 			"message": "Токен не передан.",
 		}, 400)
 		return
 	}
 
-	// Ищем пользователя по access_token
-	userData, err := GetFromDatabaseByValue("Users", "access_token", access_token)
+	// Ищем пользователя по token
+	userData, err := GetFromDatabaseByValue("Users", "refresh_tokens", refresh_token)
 	if err != nil {
 		fmt.Println("Пользователь не найден, выход не осуществлён.")
 		WriteResponse(&w, &map[string]interface{}{

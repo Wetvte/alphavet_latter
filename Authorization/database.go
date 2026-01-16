@@ -229,7 +229,7 @@ func GetFromDatabaseByValue(db_name string, key_name string, key string) (*primi
 }
 
 // Удаляет, если есть, из нужной таблицы БД
-func DeleteFromDatabase(db_name string, key_name string, key string) error {
+func DeleteFromDatabase(db_name string, key_name string, key interface{}) error {
 	fmt.Println("Удаление из БД", db_name, "по ключу", key_name, "|", key)
 	collection := mongoClient.Database("LatterProject").Collection(db_name)
 	if collection == nil {
@@ -244,7 +244,7 @@ func DeleteFromDatabase(db_name string, key_name string, key string) error {
 	if result.DeletedCount == 0 {
 		return err // нечего удалять
 	}
-
+	fmt.Println("Удаление из БД - 100%")
 	return nil
 }
 
