@@ -7,7 +7,7 @@
 - Создать почту и открыть усправление через smtp, получить специальный пароль для управления ею изве
 - Создать файл .env с данными с указать его путь в коде файла Authorization/environment.go.
 - Настроить содержимое .env файла:
-    SERVER_PORT=8080 # Порт сервера авторизации
+    ```SERVER_PORT=8080 # Порт сервера авторизации
     MONGODB_URI=mongodb+srv://(Пользователь):(Пароль)@(Ссылка на кластер)
     GITHUB_CLIENT_ID=
     GITHUB_CLIENT_SECRET=
@@ -22,7 +22,7 @@
     MAIL=
     MAIL_PASSWORD=
     MAIL_PASSWORD_OUTSIDE= # Спец. пароль
-    TEST_MODULE_URL=http://localhost:4000 # Адрес основного модуля
+    TEST_MODULE_URL=http://localhost:4000 # Адрес основного модуля```
 - Запускается командой go run . в директиве Authorization
 
 2) Настроить модуль Веб клиента
@@ -31,14 +31,13 @@
 - Создать базу данных на сайте Redis
 - Создать файл .env с данными с указать его путь в коде файла WebClient/backend/server.js.
 - Настроить содержимое .env файла:
-    SERVER_DOMAIN=localhost
+    ```SERVER_DOMAIN=localhost
     SERVER_PORT=3000 # Порт сервера клиента
     SERVER_URL=http://localhost/web
     SERVERS_COUNT=
-    # Ссылка на редис, как она дана на сайте
-    REDIS_URI=redis://(Ссылка)
+    REDIS_URI=redis://(Ссылка) # Ссылка на редис, как она дана на сайте
     AUTHORIZATION_MODULE_URL=http://localhost:8080 # Адрес подуля авторизации
-    TEST_MODULE_URL=http://localhost:4000 # Адрес Основного подуля
+    TEST_MODULE_URL=http://localhost:4000 # Адрес Основного подуля```
 - Настроить переменную persistent_path в методах generate_site_page и generate_entry_page в WebClient/backend/server.js
 - Запускается командой node server.js в директиве WebClient/backend
 
@@ -46,95 +45,90 @@
 - Создать бота и сохранить его токен
 - Создать файл .env с данными с указать его путь в коде файла ...
 - Настроить содержимое .env файла:
-    SERVER_HOST=localhost
+    ```SERVER_HOST=localhost
     SERVER_PORT=2000
     SERVER_URL=http://localhost/tbot
     SERVERS_COUNT=
-    # Для редис нужна строка вида
-    REDIS_URI=домен:порт,password=пароль,abortConnect=false,connectTimeout=10000,syncTimeout=10000
-    # Адрес Основного модуля
-    AUTHORIZATION_MODULE_URL=http://localhost:8080
-    # Адрес модуля Авторизации
-    TEST_MODULE_URL=http://127.0.0.1:4000
-    # Токен бота
-    BOT_TOKEN=8291005932:AAHK4-Tru9Kye-w-Javu3xjIgwXMHlms5qk
+    REDIS_URI=домен:порт,password=пароль,abortConnect=false,connectTimeout=10000,syncTimeout=10000 # Для редис нужна строка вида
+    AUTHORIZATION_MODULE_URL=http://localhost:8080 # Адрес Основного модуля
+    TEST_MODULE_URL=http://127.0.0.1:4000 # Адрес модуля Авторизации
+    BOT_TOKEN=8291005932:AAHK4-Tru9Kye-w-Javu3xjIgwXMHlms5qk # Токен бота```
 - Запускается командой dotnet run в директиве TelegramBot
 
 4) Настроить основной модуль
 - Скачать PostgreSQL
 - Создать файл .env с данными с указать его путь в коде файла TestProcessing/src/db_connector.cpp.
 - Настроить содержимое .env файла:
-    # Для PostgreSQL
-    DB_HOST=localhost
+    ```DB_HOST=localhost # Для PostgreSQL
     DB_PORT=5432
-    DB_NAME=LatterProject
+    DB_NAME=
     DB_USER=postgres
     DB_PASS= # Пароль от БД
-    # Хост модуля (localhost не работает)
-    API_HOST=127.0.0.1
-    # Порт модуля
-    API_PORT=4000
-    # Ключ генерации токенов из модуля Авторизации
-    OWN_TOKEN_GENERATE_KEY=ABOBA
-    # Адрес Основного подуля Авторизации
-    AUTHORIZATION_MODULE_URL=http://localhost:8080
+    API_HOST=127.0.0.1 # Хост модуля (localhost не работает)
+    API_PORT=4000 # Порт модуля
+    OWN_TOKEN_GENERATE_KEY= # Ключ генерации токенов из модуля Авторизации
+    AUTHORIZATION_MODULE_URL=http://localhost:8080 # Адрес Основного подуля Авторизации
     AUTHORIZATION_MODULE_HOST=localhost
-    AUTHORIZATION_MODULE_PORT=8080
+    AUTHORIZATION_MODULE_PORT=8080```
 - Создать следующие таблицы: users, disciplines, tests, questions, tries, answers, news.
 - Настроить таблицы кодом ниже.
 - Установить jwt-cpp в vcpkg, расположенном на локальной машине и указать полный путь к нему в TestProcessing/CMakeLists.txt
 - В файле .vscode/settings.json указать свои пути для папок build и CMakeLists.txt
 - Запускается командой latter.exe в директиве TestProcessing/build/Debug
 
-5) Каждый из модулей запускается в отдельной cmd.
+Примечания:
+- Каждый из модулей запускается в отдельной cmd.
 - Перед запуском модулей стоит включить VPN.
-- Для запуска модуля авторизации нужно попасть в папку Authorization и испольнить команду "go run ."
-- Для запуска Веб клиента необходимо в папке WebClient вызвать команду "node backend/server.js"
-- Для запуска Основного модуля необходимо в папке TestProcessing ...
-- Для запуска модуля Telegram бота необходимо ...
 
 # Чтобы объединить клиенты Веб и Телеграм, нужно установить Nginx и в его папке conf изменить файл nginx.conf:
-upstream web {
-    server http://localhost:3001;
-    server http://localhost:3002;
-    server http://localhost:3003;
+```worker_processes  1;
+
+events {
+    worker_connections  1024;
 }
-
-upstream tbot {
-    server http://localhost:2001;
-    server http://localhost:2002;
-    server http://localhost:2003;
-}
-
-server {
-    listen 80;
-    server_name localhost;
-
-    # Прокси для веб‑сервисов
-    location /web/ {
-        proxy_pass http://web/;
-        proxy_set_header Host $host;
-        proxy_set_header X-Real-IP $remote_addr;
-        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+http {
+    upstream web {
+        server localhost:3001;
+        server localhost:3002;
+        server localhost:3003;
     }
 
-    # Прокси для ботов
-    location /bot/ {
-        proxy_pass http://tbot/;
-        proxy_set_header Host $host;
-        proxy_set_header X-Real-IP $remote_addr;
-        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+    upstream tbot {
+        server localhost:2001;
+        server localhost:2002;
+        server localhost:2003;
     }
 
-    # Здоровье
-    location /health/ {
-        return 200 "OK\n";
+    server {
+        listen 80;
+        server_name localhost;
+
+        # Прокси для веб‑сервисов
+        location /web/ {
+            proxy_pass http://web/;
+            proxy_set_header Host $host;
+            proxy_set_header X-Real-IP $remote_addr;
+            proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        }
+
+        # Прокси для ботов
+        location /tbot/ {
+            proxy_pass http://tbot/;
+            proxy_set_header Host $host;
+            proxy_set_header X-Real-IP $remote_addr;
+            proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        }
+
+        # Здоровье
+        location /health/ {
+            return 200 "OK\n";
+        }
     }
-}
+}```
 
 
 # SQL код для настройки созданных таблиц
-ALTER TABLE answers
+```ALTER TABLE answers
 ADD COLUMN id INT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
 ADD COLUMN question_signature INT[2] NOT NULL,
 ADD COLUMN options INT[] DEFAULT '{}',
@@ -216,9 +210,9 @@ $$ LANGUAGE plpgsql;
 CREATE TRIGGER trigger_set_points
 BEFORE UPDATE OF options ON answers  -- срабатывает при обновлении Options
 FOR EACH ROW
-EXECUTE FUNCTION set_points();
+EXECUTE FUNCTION set_points();```
 
-ALTER TABLE tries
+```ALTER TABLE tries
 ADD COLUMN id INT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
 ADD COLUMN status VARCHAR(12) DEFAULT 'Solving',
 ADD COLUMN author VARCHAR(20) NOT NULL,
@@ -304,10 +298,9 @@ $$ LANGUAGE plpgsql;
 CREATE TRIGGER trigger_auto_increment_question
 BEFORE INSERT ON questions
 FOR EACH ROW
-EXECUTE FUNCTION public.auto_increment_question();
+EXECUTE FUNCTION public.auto_increment_question();```
 
-
-ALTER TABLE users
+```ALTER TABLE users
 ADD COLUMN id VARCHAR(20) NOT NULL PRIMARY KEY,
 ADD COLUMN status VARCHAR(20) DEFAULT 'Offline',
 ADD COLUMN first_name VARCHAR(20) NOT NULL,
@@ -315,18 +308,18 @@ ADD COLUMN last_name VARCHAR(20) DEFAULT '',
 ADD COLUMN patronimyc VARCHAR(20) DEFAULT '',
 ADD COLUMN roles TEXT[] DEFAULT '{"Student"}';
 ADD COLUMN nickname VARCHAR(20) NOT NULL,
-ADD COLUMN email VARCHAR(100) NOT NULL;
+ADD COLUMN email VARCHAR(100) NOT NULL;```
 
-ALTER TABLE disciplines
+```ALTER TABLE disciplines
 ADD COLUMN id INT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
 ADD COLUMN title VARCHAR(100),
 ADD COLUMN describtion VARCHAR(500),
 ADD COLUMN status VARCHAR(20) DEFAULT 'Exists',
 ADD COLUMN students TEXT[] DEFAULT '{}',
 ADD COLUMN teachers TEXT[] DEFAULT '{}',
-ADD COLUMN tests INT[] DEFAULT '{}';
+ADD COLUMN tests INT[] DEFAULT '{}';```
 
-ALTER TABLE tests
+```ALTER TABLE tests
 ADD COLUMN id INT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
 ADD COLUMN title VARCHAR(50) NOT NULL,
 ADD COLUMN describtion VARCHAR(250) NOT NULL,
@@ -334,13 +327,13 @@ ADD COLUMN status VARCHAR(20) DEFAULT 'Deactivated',
 ADD COLUMN author VARCHAR(20) NOT NULL,
 ADD COLUMN max_tries_for_student INT DEFAULT 1,
 ADD COLUMN questions_signatures INT[][2] DEFAULT '{}',
-ADD COLUMN tries INT[] DEFAULT '{}';
+ADD COLUMN tries INT[] DEFAULT '{}';```
 
-ALTER TABLE news
+```ALTER TABLE news
 ADD COLUMN id INT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
 ADD COLUMN status VARCHAR(20) DEFAULT 'Sended', -- Sended, Viewed, Deleted
 ADD COLUMN sender VARCHAR(20) NOT NULL,
 ADD COLUMN recipient VARCHAR(20) NOT NULL,
-ADD COLUMN text VARCHAR(200) DEFAULT '';
+ADD COLUMN text VARCHAR(200) DEFAULT '';```
 
-
+Вроде всё.
